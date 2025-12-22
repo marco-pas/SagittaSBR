@@ -1,304 +1,266 @@
 #include <iostream>
-#include <time.h>
+#include <cmath>
+#include <ctime>
+#include <cfloat>
 
-#include <float.h>          // we also add this now
+#include <cuda_runtime.h>
+#include <cuComplex.h>
 
-#include "vec3.h"           // for vectors (color RGBs)
-#include "ray.h"            // ray class
-#include "sphere.h"         // implements the hit for the sphere 
-#include "box.h"         // implements the hit for the sphere 
-#include "hitable_list.h"   // implements the closest hit for general object
+#include "vec3.h"
+#include "ray.h"
+#include "sphere.h"
+#include "hitable_list.h"
 
-/*
+// CUDA error checking
+#define checkCudaErrors(val) check_cuda((val), #val, __FILE__, __LINE__)
 
-In Part 5 the we create a world of spheres on the device
-@@ this is not really useful in our implementation as we would just like to have 1 single object!
-
-In "hitable.h" we will later implement the normal of our surface.
-@@ this will be crucial in our SBR implementation.
-@@ on thing to note here is that if we have a sphere we can have the analytical formula so we can get the normal quite easily
-@@ when you have a complex geometry defined my meshes we have to see how to deal with this
-
-*/
-
-
-// limited version of checkCudaErrors from helper_cuda.h in CUDA examples
-#define checkCudaErrors(val) check_cuda( (val), #val, __FILE__, __LINE__ )
-
-void check_cuda(cudaError_t result, char const *const func, const char *const file, int const line) {
-    if (result) {
-        std::cerr << "CUDA error = " << static_cast<unsigned int>(result) << " at " <<
-            file << ":" << line << " '" << func << "' \n";
-        // Make sure we call CUDA Device Reset before exiting
+void check_cuda(cudaError_t result, char const* func, const char* file, int line) {
+    if (result != cudaSuccess) {
+        std::cerr << "CUDA error = " << static_cast<unsigned int>(result)
+                  << " at " << file << ":" << line
+                  << " '" << func << "'\n";
         cudaDeviceReset();
-        exit(99);
+        exit(1);
     }
 }
 
-// called from the GPU, runs on the GPU
-__device__ vec3 color(const ray& r, hitable **world) {
+__global__ void launcher(
+    vec3* hit_pos,
+    vec3* hit_normal,
+    float* hit_dist,
+    int* hit_flag,
+    int nx, int ny,
+    vec3 llc,
+    vec3 horiz,
+    vec3 vert,
+    hitable** world
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    if (i >= nx || j >= ny) return;
+
+    int idx = j * nx + i;
+
+    // grid coordinates
+    float u = (i + 0.5f) / float(nx);
+    float v = (j + 0.5f) / float(ny);
+
+    // ray starting position on the launch plane
+    vec3 ray_start = llc + u * horiz + v * vert;
+
+    // all rays launch along -z
+    vec3 ray_dir = vec3(0.0f, 0.0f, -1.0f);
+
+    ray r(ray_start, ray_dir);
+
     hit_record rec;
-
-    // if hit
-    if ((*world)->hit(r, 0.0, FLT_MAX, rec)) {
-        return 0.5f*vec3(rec.normal.x()+1.0f, rec.normal.y()+1.0f, rec.normal.z()+1.0f);
-    }
-    // if not hit here then we set the background gradient
-    // @@ here if no hit then we wouldn't do anything in out SB
-    else {
-        vec3 unit_direction = unit_vector(r.direction());
-        float t = 0.5f*(unit_direction.y() + 1.0f);
-        return (1.0f-t)*vec3(1.0, 1.0, 1.0) + t*vec3(0.5, 0.7, 1.0);
+    if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
+        hit_flag[idx]   = 1;
+        hit_pos[idx]    = rec.p;
+        hit_normal[idx] = rec.normal;
+        hit_dist[idx]   = rec.t;
+    } else {
+        hit_flag[idx] = 0;
     }
 }
 
-// called from the GPU, runs on the GPU
-__device__ vec3 collide(const ray& r, hitable **world) {
-    hit_record rec;
+// PO integral kernel (scalar, single-pol, monostatic)
+__global__ void integral_PO(
+    vec3* hit_pos,
+    vec3* hit_normal,
+    float* hit_dist,
+    int* hit_flag,
+    int n,
+    float k,
+    vec3 k_inc,
+    float ray_area,
+    cuFloatComplex* accum
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n || !hit_flag[idx]) return;
 
-    // if hit
-    if ((*world)->hit(r, 0.0, FLT_MAX, rec)) { 
-        return;
-    }
-    // if not hit here then we set the background gradient
-    // @@ here if no hit then we wouldn't do anything in out SB
-    else {
-        return;
-    }
+    // Shadowing (illuminated region only)
+    if (dot(hit_normal[idx], -k_inc) <= 0.0f) return;
+
+    float phase =
+        2.0f * k * hit_dist[idx]
+        - dot(k_inc, hit_pos[idx]);
+
+    cuFloatComplex e =
+        make_cuFloatComplex(cosf(phase), sinf(phase));
+
+    cuFloatComplex factor =
+        make_cuFloatComplex(0.0f, k * ray_area / (4.0f * M_PI));
+
+    cuFloatComplex contrib = cuCmulf(e, factor);
+
+    atomicAdd(&accum->x, contrib.x);
+    atomicAdd(&accum->y, contrib.y);
 }
 
-// called from the CPU, runs on the GPU
-__global__ void render(vec3 *fb, int max_x, int max_y,
-                       vec3 lower_left_corner, vec3 horizontal, vec3 vertical, vec3 origin,
-                       hitable **world // we use a pointer to a pointer here to maintain generality, good for extensibility!
-                    ) {
-    int i = threadIdx.x + blockIdx.x * blockDim.x;                          // get position x
-    int j = threadIdx.y + blockIdx.y * blockDim.y;                          // get position y
-    if((i >= max_x) || (j >= max_y)) return;                                // make sure we are inside the window
-    int pixel_index = j*max_x + i;                                          // row major
-    
-    // now the color is set via the device function 
-    float u = float(i) / float(max_x);
-    float v = float(j) / float(max_y);
-    ray r(origin, lower_left_corner + u * horizontal + v * vertical);
-
-    fb[pixel_index] = color(r, world);  // this is what updates the color (@@ change)
-
-    // @@ register collisions here instead of the color 
-    // no need for teh pixel info, we need the space info
-
-    // @@ also need to do have a kernel for the phase calculation
-    /*
-    if ((*world)->hit(r, 0.0, FLT_MAX, rec)) { 
-        
-    }
-    */
-
-}
-
-
-__global__ void render(float *distance_buffer, vec3 *position_buffer, vec3 *normal_buffer
-                       int max_x, int max_y,
-                       vec3 lower_left_corner, vec3 horizontal, vec3 vertical, vec3 origin,
-                       hitable **world // we use a pointer to a pointer here to maintain generality, good for extensibility!
-                    ) {
-    int i = threadIdx.x + blockIdx.x * blockDim.x;                          // get position x
-    int j = threadIdx.y + blockIdx.y * blockDim.y;                          // get position y
-    if((i >= max_x) || (j >= max_y)) return;                                // make sure we are inside the window
-    int pixel_index = j*max_x + i;                                          // row major
-    
-    // now the color is set via the device function 
-    float u = float(i) / float(max_x);
-    float v = float(j) / float(max_y);
-    ray r(origin, lower_left_corner + u * horizontal + v * vertical);
-
-    fb[pixel_index] = color(r, world);  // this is what updates the color (@@ change)
-
-    // hits
-
-    // (...)
-
-
-
-    distance_buffer[pixel_index] = ...
-    position_buffer[pixel_index] = ...
-    normal_buffer[pixel_index] = ...
-
-
-    // @@ register collisions here instead of the color 
-    // no need for teh pixel info, we need the space info
-
-    // @@ also need to do have a kernel for the phase calculation
-    /*
-    if ((*world)->hit(r, 0.0, FLT_MAX, rec)) { 
-        
-    }
-    */
-
-}
-
-__global__ void create_world(hitable **d_list, hitable **d_world) { // (@@ keep)
+// World creation / destruction
+__global__ void create_world(hitable** d_list, hitable** d_world) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        *(d_list)   = new sphere(vec3(0.0, 6, -15.0), 2);
-        *(d_list+1) = new sphere(vec3(0.5, -0.3, -2.0), 0.6);
-
-        // horizontal, vertical, distance from view (negative)
-        *(d_list+2) = new box( vec3(-0.95, -0.2, -2.0) ,     // min point (<)
-                               vec3(-0.5 ,  0.5, -1.0) );    // max point (>)
-        // 
-        
-        *d_world    = new hitable_list(d_list,3); // 3 is the number of elements
+        // Sphere centered in domain
+        d_list[0] = new sphere(vec3(0.0f, 0.0f, -4.0f), 2.0f);
+        *d_world  = new hitable_list(d_list, 1);
     }
 }
 
-__global__ void free_world(hitable **d_list, hitable **d_world) {
-    delete *(d_list);
-    delete *(d_list+1);
-    delete *(d_list+2);
+__global__ void free_world(hitable** d_list, hitable** d_world) {
+    delete d_list[0];
     delete *d_world;
 }
 
-// (@@ change: to calculate the various tehta position we need to rotate the thing around!)
-// rotate the objects or rotate the view, maybe easier
-// for the start just do 1 position
-// this should be done in a spheric view
-int main() { 
-    int nx = 300;     // pixel horiz
-    int ny = 200;     // pixel vert
-    int tx = 8;       // block horiz
-    int ty = 8;       // block vert
-    int max_hit = 10; // max number of hits
+// MAIN
+int main() {
 
-    // (@@ change)
-    std::cerr << "Rendering a " << nx << "x" << ny << " image ";
+    // Parameters
+    const int nx = 600;
+    const int ny =400;
+    const int tx = 8;
+    const int ty = 8;
+
+    const float freq = 10.0e9f;
+    const float c0   = 299792458.0f;
+    const float lambda = c0 / freq;
+    const float k = 2.0f * M_PI / lambda;
+
+    const float phi   = 0.3f;
+    const float theta = 0.2f;
+
+    vec3 k_inc(
+        sinf(theta) * cosf(phi),
+        sinf(theta) * sinf(phi),
+        cosf(theta)
+    );
+
+    const float H = 4.0f;
+    const float V = 2.0f;
+
+    vec3 llc(-H / 2.0f, -V / 2.0f, 4.0f);
+    vec3 horiz(H, 0.0f, 0.0f);
+    vec3 vert(0.0f, V, 0.0f);
+    vec3 origin(0.0f, 0.0f, 0.0f);
+
+    const float ray_area = (H * V) / (nx * ny);
+    const int N = nx * ny;
+
+    // Set-up prints
+    std::cerr << "--- Calculating RCS for a " << nx << "x" << ny << " image ";
     std::cerr << "in " << tx << "x" << ty << " blocks.\n";
-    // std::cerr << "Calculating RCS for a " << nx << "x" << ny << " image ";
-    // std::cerr << "in " << tx << "x" << ty << " blocks.\n";
+    std::cerr << "Frequency set to " << freq << " Hz.\n";
+    std::cerr << "There are " << N
+              << " rays. Density is "
+              << (N / (V * H))
+              << " (rays / m^2).\n";
 
-    int num_pixels = nx*ny;
+    // Allocate buffers
+    vec3* hit_pos;
+    vec3* hit_normal;
+    float* hit_dist;
+    int* hit_flag;
 
-    // allocate Distance Buffer
-    float *distance_buffer;
-    size_t distance_buffer_size = max_hit * num_pixels * sizeof(float);
-    checkCudaErrors(cudaMallocManaged((void**)&distance_buffer, distance_buffer_size));
+    checkCudaErrors(cudaMallocManaged(&hit_pos,    N * sizeof(vec3)));
+    checkCudaErrors(cudaMallocManaged(&hit_normal, N * sizeof(vec3)));
+    checkCudaErrors(cudaMallocManaged(&hit_dist,   N * sizeof(float)));
+    checkCudaErrors(cudaMallocManaged(&hit_flag,   N * sizeof(int)));
 
-    // allorate Hit-Position Buffer
-    vec3 *position_buffer;
-    size_t position_buffer_size = sizeof(vec3) * max_hit * num_pixels;
-    checkCudaErrors(cudaMallocManaged((void**)&position_buffer, position_buffer_size));
+    cuFloatComplex* accum;
+    checkCudaErrors(cudaMallocManaged(&accum, sizeof(cuFloatComplex)));
+    accum->x = accum->y = 0.0f;
 
-    // allocate Normal-to-Surface Buffer
-    vec3 *normal_buffer;
-    size_t normal_buffer_size = sizeof(vec3) * max_hit * num_pixels;
-    checkCudaErrors(cudaMallocManaged((void**)&normal_buffer, normal_buffer_size));
+    // World
+    hitable** d_list;
+    hitable** d_world;
+    checkCudaErrors(cudaMalloc(&d_list, sizeof(hitable*)));
+    checkCudaErrors(cudaMalloc(&d_world, sizeof(hitable*)));
 
-    // // allocate Frame Buffer
-    // vec3 *fb;
-    // size_t fb_size = num_pixels * sizeof(vec3);
-    // checkCudaErrors(cudaMallocManaged((void **)&fb, fb_size));
-
-    ///////////////
-    std::cerr << "Creating World!";
-    ///////////////
-
-    // make our world of hitables: this is the new part!!!
-    hitable **d_list;
-    checkCudaErrors(cudaMalloc((void **)&d_list, 2*sizeof(hitable *)));
-    hitable **d_world;
-    checkCudaErrors(cudaMalloc((void **)&d_world, sizeof(hitable *)));
-    create_world<<<1,1>>>(d_list,d_world);
-    checkCudaErrors(cudaGetLastError());
+    create_world<<<1,1>>>(d_list, d_world);
     checkCudaErrors(cudaDeviceSynchronize());
 
-    clock_t start, stop;
-    start = clock();
-    // Render our buffer
-    dim3 blocks(nx/tx+1,ny/ty+1);
-    dim3 threads(tx,ty);
+    // Launch rays
+    dim3 threads(tx, ty);
+    dim3 blocks((nx + tx - 1) / tx, (ny + ty - 1) / ty);
 
-    ///////////////
-    std::cerr << "Launching Rays!";
-    ///////////////
+    std::cerr << "--- Launching Rays!\n";
+    clock_t start = clock();
 
-    // - - - - 
-    // @@ this is where you would rotate the view
-    // you should make sure that the object are fixed in space though if you want to rotate
-    render<<<blocks, threads>>>(fb, nx, ny,             // KERNEL!
-                                vec3(-2.0, -1.0, -1.0), // lower left corner
-                                vec3( 4.0,  0.0,  0.0), // horizontal
-                                vec3( 0.0,  2.0,  0.0), // vertical
-                                vec3( 0.0,  0.0,  0.0), // origin
-                                d_world);               //
-
-    launcher<<<blocks, threads>>>(distance_buffer, position_buffer, normal_buffer,  // NEW KERNEL!
-                                nx, ny,             
-                                vec3(-2.0, -1.0, -1.0), // lower left corner
-                                vec3( 4.0,  0.0,  0.0), // horizontal
-                                vec3( 0.0,  2.0,  0.0), // vertical
-                                vec3( 0.0,  0.0,  0.0), // origin
-                                d_world);               //
-
-    // lower left corner just defines the camera in space... it is an arbitrary point!
-
-    // - - - - 
-
-
-
-    checkCudaErrors(cudaGetLastError());
+    launcher<<<blocks, threads>>>(
+        hit_pos,
+        hit_normal,
+        hit_dist,
+        hit_flag,
+        nx, ny,
+        llc,
+        horiz,
+        vert,
+        d_world
+    );
     checkCudaErrors(cudaDeviceSynchronize());
-    stop = clock();
-    double timer_seconds = ((double)(stop - start)) / CLOCKS_PER_SEC;
-    std::cerr << "Took " << timer_seconds << " seconds.\n";
 
-    // @@ here instead of outputing the image we would calucluate the PO integral with a kernel
-    // Output FB as Image 
-    std::cout << "P3\n" << nx << " " << ny << "\n255\n";
-    for (int j = ny-1; j >= 0; j--) {
-        for (int i = 0; i < nx; i++) {
-            size_t pixel_index = j*nx + i;
-            int ir = int(255.99*fb[pixel_index].r());
-            int ig = int(255.99*fb[pixel_index].g());
-            int ib = int(255.99*fb[pixel_index].b());
-            std::cout << ir << " " << ig << " " << ib << "\n";
-        }
-    }
+    clock_t stop = clock();
+    double timer_seconds = double(stop - start) / CLOCKS_PER_SEC;
+    std::cerr << "Took " << timer_seconds
+              << " seconds for the collisions.\n";
 
-    // clean up
-    checkCudaErrors(cudaDeviceSynchronize());
-    free_world<<<1,1>>>(d_list,d_world);
-    checkCudaErrors(cudaGetLastError());
-    checkCudaErrors(cudaFree(d_list));
-    checkCudaErrors(cudaFree(d_world));
-    checkCudaErrors(cudaFree(fb)); // @@ clean the correct things at the end, this wont be needed
-
-    // useful for cuda-memcheck --leak-check full
-    cudaDeviceReset();
-
-    // @@ last part to consider:
-    // we launch rays from a position but we dont have to calculate the RCS at the same position.
-    // we can make sure that the ray-launching surface is far enough not to interact with the
-    // hitables in the world. cus it will just not matter.
-
-    // @@ additional: 
-    // - we can keep the .ppm generation just to visualize fast the scene
-    // - we can put the opacity thing
-
-    // @@ last part is moving to crazy objects with the mesh and BVH approach
-
-    // @@ for the results it could be cool to see a difference between the analytical sphere and the meshed sphere
+    // Count number of hits
+    int hit_count = 0;
+    for (int i = 0; i < nx * ny; ++i) {
+        hit_count += hit_flag[i];
 }
 
-
-/*
-
-implement:
-
-1) max number of reflections
-2) maybe can implement the opache thingy but not really necessary
-3) when you have hit instead of going to the color thing you can 
-just give back to the host the points, the distance between hits
-caluclate the phase and do the integral
-
-*/
+std::cerr << "Number of rays hitting object: "
+          << hit_count << "\n";
 
 
+    // PO Integral
+    std::cerr << "--- Calculating Integral!\n";
+
+    int threads1D = 256;
+    int blocks1D = (N + threads1D - 1) / threads1D;
+
+    start = clock();
+
+    integral_PO<<<blocks1D, threads1D>>>(
+        hit_pos,
+        hit_normal,
+        hit_dist,
+        hit_flag,
+        N,
+        k,
+        k_inc,
+        ray_area,
+        accum
+    );
+    checkCudaErrors(cudaDeviceSynchronize());
+
+    stop = clock();
+    timer_seconds = double(stop - start) / CLOCKS_PER_SEC;
+    std::cerr << "Took " << timer_seconds
+              << " seconds for the integral calculation.\n";
+
+    // RCS
+    float sigma =
+        4.0f * M_PI *
+        (accum->x * accum->x + accum->y * accum->y);
+
+    std::cerr << "RCS value is " << sigma << " m^2\n";
+
+    // Cleanup
+    std::cerr << "--- Cleaning up!\n";
+
+    free_world<<<1,1>>>(d_list, d_world);
+    cudaDeviceSynchronize();
+
+    cudaFree(hit_pos);
+    cudaFree(hit_normal);
+    cudaFree(hit_dist);
+    cudaFree(hit_flag);
+    cudaFree(accum);
+    cudaFree(d_list);
+    cudaFree(d_world);
+
+    cudaDeviceReset();
+    return 0;
+}
