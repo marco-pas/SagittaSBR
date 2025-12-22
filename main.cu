@@ -112,12 +112,82 @@ __global__ void free_world(hitable** d_list, hitable** d_world) {
     delete *d_world;
 }
 
+// Function to print GPU information
+void printGPUInfo() {
+    cudaDeviceProp prop;
+    int deviceCount;
+    cudaGetDeviceCount(&deviceCount);
+    
+    if (deviceCount == 0) {
+        std::cerr << "✗ No CUDA-capable devices found\n";
+        return;
+    }
+    
+    cudaGetDeviceProperties(&prop, 0);
+    
+    std::cerr << "╔═══════════════════════════════════════════════════╗\n";
+    std::cerr << "║                   GPU INFORMATION                 ║\n";
+    std::cerr << "╠═══════════════════════════════════════════════════╣\n";
+    std::cerr << "║ Device: " << prop.name << "\n";
+    std::cerr << "║ Compute Capability: " << prop.major << "." << prop.minor << "\n";
+    std::cerr << "║ Total Global Memory: " 
+              << prop.totalGlobalMem / (1024 * 1024 * 1024.0) << " GB\n";
+    std::cerr << "║ Multiprocessors: " << prop.multiProcessorCount << "\n";
+    std::cerr << "║ Max Threads per Block: " << prop.maxThreadsPerBlock << "\n";
+    std::cerr << "╚═══════════════════════════════════════════════════╝\n";
+    std::cerr << "\n";
+}
+
+// Function to print a separator line
+void printSeparator(const std::string& title = "") {
+    std::cerr << "\n";
+    if (!title.empty()) {
+        std::cerr << "┌── " << title << " ";
+        int remaining = 50 - title.length() - 4;
+        for (int i = 0; i < remaining; i++) std::cerr << "─";
+        std::cerr << "┐\n";
+    } else {
+        std::cerr << "┌───────────────────────────────────────────────────┐\n";
+    }
+}
+
+void printEndSeparator() {
+    std::cerr << "└──────────────────────────────────────────────────┘\n";
+}
+
+// Function to print key-value pair
+template<typename T>
+void printKV(const std::string& key, const T& value, const std::string& unit = "") {
+    std::cerr << "│ " << key << ": " << value;
+    if (!unit.empty()) std::cerr << " " << unit;
+    std::cerr << "\n";
+}
+
+// Function to format time
+std::string formatTime(double seconds) {
+    if (seconds < 0.001) {
+        return std::to_string(seconds * 1e6) + " µs";
+    } else if (seconds < 1.0) {
+        return std::to_string(seconds * 1000) + " ms";
+    } else {
+        return std::to_string(seconds) + " s";
+    }
+}
+
 // MAIN
 int main() {
-
+    // Print program header
+    std::cerr << "\n";
+    std::cerr << "╔═══════════════════════════════════════════════════╗\n";
+    std::cerr << "║      PHYSICAL OPTICS RCS SIMULATION - CUDA        ║\n";
+    std::cerr << "╚═══════════════════════════════════════════════════╝\n";
+    
+    // Print GPU information
+    printGPUInfo();
+    
     // Parameters
     const int nx = 600;
-    const int ny =400;
+    const int ny = 400;
     const int tx = 8;
     const int ty = 8;
 
@@ -146,16 +216,23 @@ int main() {
     const float ray_area = (H * V) / (nx * ny);
     const int N = nx * ny;
 
-    // Set-up prints
-    std::cerr << "--- Calculating RCS for a " << nx << "x" << ny << " image ";
-    std::cerr << "in " << tx << "x" << ty << " blocks.\n";
-    std::cerr << "Frequency set to " << freq << " Hz.\n";
-    std::cerr << "There are " << N
-              << " rays. Density is "
-              << (N / (V * H))
-              << " (rays / m^2).\n";
+    // Print simulation parameters
+    printSeparator("SIMULATION PARAMETERS");
+    printKV(" Ray Grid", std::to_string(nx) + " × " + std::to_string(ny));
+    printKV(" Block Size", std::to_string(tx) + " × " + std::to_string(ty));
+    printKV(" Frequency", freq / 1e9, "GHz");
+    printKV(" Wavelength", lambda * 1000, "mm");
+    printKV(" Wave Number k", k, "rad/m");
+    printKV(" Illumination Area", H * V, "m²");
+    printKV(" Total Rays", N, "");
+    printKV(" Ray Density", N / (H * V), "rays/m²");
+    printKV(" Ray Area", ray_area, "m²");
+    printEndSeparator();
 
     // Allocate buffers
+    printSeparator("MEMORY ALLOCATION");
+    std::cerr << "│  Allocating device memory...\n";
+    
     vec3* hit_pos;
     vec3* hit_normal;
     float* hit_dist;
@@ -176,16 +253,28 @@ int main() {
     checkCudaErrors(cudaMalloc(&d_list, sizeof(hitable*)));
     checkCudaErrors(cudaMalloc(&d_world, sizeof(hitable*)));
 
+    std::cerr << "│  Memory allocated successfully\n";
+    printKV(" Total Allocated", (N * (sizeof(vec3)*2 + sizeof(float) + sizeof(int)) + 
+                                sizeof(cuFloatComplex) + 2*sizeof(hitable*)) / (1024*1024.0), "MB");
+    printEndSeparator();
+
+    // Create world
+    printSeparator("SCENE SETUP");
+    std::cerr << "│  Creating sphere object...\n";
     create_world<<<1,1>>>(d_list, d_world);
     checkCudaErrors(cudaDeviceSynchronize());
+    std::cerr << "│  Sphere created (center: [0,0,-4], radius: 2)\n";
+    printEndSeparator();
 
     // Launch rays
     dim3 threads(tx, ty);
     dim3 blocks((nx + tx - 1) / tx, (ny + ty - 1) / ty);
 
-    std::cerr << "--- Launching Rays!\n";
+    printSeparator("RAY TRACING");
+    std::cerr << "│  Launching " << blocks.x << " × " << blocks.y 
+              << " blocks with " << threads.x << " × " << threads.y << " threads\n";
+    
     clock_t start = clock();
-
     launcher<<<blocks, threads>>>(
         hit_pos,
         hit_normal,
@@ -201,27 +290,31 @@ int main() {
 
     clock_t stop = clock();
     double timer_seconds = double(stop - start) / CLOCKS_PER_SEC;
-    std::cerr << "Took " << timer_seconds
-              << " seconds for the collisions.\n";
+    
+    std::cerr << "│  Ray tracing completed\n";
+    printKV(" Time", formatTime(timer_seconds));
 
     // Count number of hits
     int hit_count = 0;
     for (int i = 0; i < nx * ny; ++i) {
         hit_count += hit_flag[i];
-}
-
-std::cerr << "Number of rays hitting object: "
-          << hit_count << "\n";
-
+    }
+    
+    float hit_percentage = (hit_count * 100.0f) / N;
+    printKV(" Rays Hit Object", hit_count);
+    printKV(" Hit Percentage", std::to_string(hit_percentage).substr(0, 5) + "%");
+    printEndSeparator();
 
     // PO Integral
-    std::cerr << "--- Calculating Integral!\n";
-
+    printSeparator("PO INTEGRAL");
+    std::cerr << "│  Calculating Physical Optics integral...\n";
+    
     int threads1D = 256;
     int blocks1D = (N + threads1D - 1) / threads1D;
-
+    
+    std::cerr << "│  Using " << blocks1D << " blocks with " << threads1D << " threads\n";
+    
     start = clock();
-
     integral_PO<<<blocks1D, threads1D>>>(
         hit_pos,
         hit_normal,
@@ -237,19 +330,27 @@ std::cerr << "Number of rays hitting object: "
 
     stop = clock();
     timer_seconds = double(stop - start) / CLOCKS_PER_SEC;
-    std::cerr << "Took " << timer_seconds
-              << " seconds for the integral calculation.\n";
+    
+    std::cerr << "│  PO integral calculated\n";
+    printKV(" Time", formatTime(timer_seconds));
+    printEndSeparator();
 
     // RCS
-    float sigma =
-        4.0f * M_PI *
-        (accum->x * accum->x + accum->y * accum->y);
-
-    std::cerr << "RCS value is " << sigma << " m^2\n";
+    printSeparator("RCS CALCULATION");
+    float sigma = 4.0f * M_PI * (accum->x * accum->x + accum->y * accum->y);
+    
+    std::cerr << "│  Accumulated Field: (" << accum->x << ", " << accum->y << "i)\n";
+    printKV(" RCS Value", sigma, "m²");
+    
+    // Convert to dBsm
+    float rcs_dBsm = 10.0f * log10f(sigma / 1.0f);
+    printKV(" RCS", rcs_dBsm, "dBsm");
+    printEndSeparator();
 
     // Cleanup
-    std::cerr << "--- Cleaning up!\n";
-
+    printSeparator("CLEANUP");
+    std::cerr << "│  Freeing device memory...\n";
+    
     free_world<<<1,1>>>(d_list, d_world);
     cudaDeviceSynchronize();
 
@@ -262,5 +363,10 @@ std::cerr << "Number of rays hitting object: "
     cudaFree(d_world);
 
     cudaDeviceReset();
+    
+    std::cerr << "│  Memory freed successfully\n";
+    printEndSeparator();
+
+
     return 0;
 }
