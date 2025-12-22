@@ -4,6 +4,7 @@ Calculate the Radar Cross Section of object via the Shooting-and-Bouncing Rays m
 
 Takes inspiration from the [Accelerated Ray Tracing in One Weekend in CUDA tutorial](https://developer.nvidia.com/blog/accelerated-ray-tracing-cuda/).
 
+
 To use:
 
 **make clean; make**
@@ -11,3 +12,5 @@ To use:
 **./SBR**
 
 **python3 plotRCS.py**
+
+The configuration file is **config.txt**
