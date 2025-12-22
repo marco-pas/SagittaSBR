@@ -29,7 +29,7 @@ void check_cuda(cudaError_t result, char const* func, const char* file, int line
     }
 }
 
-// --- FANCY PRINTING HELPERS ---
+// functions for the fancy printing
 
 void printGPUInfo() {
     cudaDeviceProp prop;
@@ -75,7 +75,11 @@ std::string formatTime(double seconds) {
     return std::to_string(seconds) + " s";
 }
 
-// Helper: Simple Key-Value Parser
+// ------------
+
+
+
+// Parser to read config.txt file
 std::map<std::string, float> loadConfig(const std::string& filename) {
     std::map<std::string, float> config;
     std::ifstream file(filename);
@@ -104,7 +108,7 @@ std::map<std::string, float> loadConfig(const std::string& filename) {
     return file.close(), config;
 }
 
-// --- KERNELS ---
+// CUDA kernels
 
 __global__ void launcher(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* hit_flag, int nx, int ny, vec3 llc, vec3 horiz, vec3 vert, vec3 ray_dir, hitable** world) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -177,10 +181,13 @@ int main() {
     std::cerr << "║  MONOSTATIC RCS SWEEP - SHOOTING & BOUNCING RAYS  ║\n";
     std::cerr << "╚═══════════════════════════════════════════════════╝\n";
     
-    printGPUInfo();
+    // GPU info
+    printGPUInfo(); 
 
+    // load configuration
     auto cfg = loadConfig("config.txt");
 
+    // if no value, then put the standard values
     float phi_start = cfg.count("phi_start") ? cfg["phi_start"] : 0.0f;
     float phi_end   = cfg.count("phi_end")   ? cfg["phi_end"]   : 180.0f;
     int phi_samples = cfg.count("phi_samples") ? (int)cfg["phi_samples"] : 181;
@@ -192,6 +199,7 @@ int main() {
     int nx          = cfg.count("nx")        ? (int)cfg["nx"]   : 400;
     int ny          = cfg.count("ny")        ? (int)cfg["ny"]   : 400;
 
+    // constants
     const float c0 = 299792458.0f;
     const float lambda = c0 / freq;
     const float k = 2.0f * M_PI / lambda;
@@ -199,6 +207,7 @@ int main() {
     const int N = nx * ny;
     const float distance_offset = 10.0f;
 
+    // start prints
     printSeparator("SIMULATION PARAMETERS");
     printKV("Frequency", freq / 1e9, "GHz");
     printKV("Wavelength", lambda * 1000, "mm");
@@ -211,6 +220,9 @@ int main() {
     printKV("Phi Range", std::to_string(phi_start) + " to " + std::to_string(phi_end));
     printEndSeparator();
 
+    // memory allocation on the Device
+
+    // our buffers to save all the data
     printSeparator("MEMORY ALLOCATION");
     vec3 *hit_pos, *hit_normal; float *hit_dist; int *hit_flag; cuFloatComplex *accum;
     checkCudaErrors(cudaMallocManaged(&hit_pos, N * sizeof(vec3)));
@@ -218,6 +230,8 @@ int main() {
     checkCudaErrors(cudaMallocManaged(&hit_dist, N * sizeof(float)));
     checkCudaErrors(cudaMallocManaged(&hit_flag, N * sizeof(int)));
     checkCudaErrors(cudaMallocManaged(&accum, sizeof(cuFloatComplex)));
+
+    // our world of hitable objects
     hitable **d_list, **d_world;
     checkCudaErrors(cudaMalloc(&d_list, sizeof(hitable*)));
     checkCudaErrors(cudaMalloc(&d_world, sizeof(hitable*)));
@@ -226,22 +240,30 @@ int main() {
     std::cerr << "│  Managed memory and world setup complete.\n";
     printEndSeparator();
 
+    // the output file that is read in python
     std::ofstream outFile("rcs_results.csv");
     outFile << "# Frequency: " << freq << "\n# Grid: " << nx << "x" << ny << "\n";
     outFile << "# GridSize: " << grid_size << "\n# ThetaSamples: " << theta_samples << "\n";
     outFile << "# PhiSamples: " << phi_samples << "\n" << "theta,phi,rcs_m2,rcs_dbsm\n";
 
+    // define the theads and the blocks
+    // @@ we may need some changes here to make everything more efficient
     dim3 threads(16, 16);
     dim3 blocks((nx + 15) / 16, (ny + 15) / 16);
+
+    // here we start the calculation for the MONOSTATIC calculation
+    // we move the launcher and the receiver (which coincide) on theta and phi
 
     printSeparator("EXECUTING SWEEP");
     clock_t total_sweep_start = clock();
     int total_iterations = 0;
 
+    // theta loop
     for (int t = 0; t < theta_samples; ++t) {
         float theta_deg = theta_start + (theta_samples > 1 ? t * (theta_end - theta_start) / (theta_samples - 1) : 0);
         float theta_rad = theta_deg * M_PI / 180.0f;
 
+        // phi loop
         for (int p = 0; p < phi_samples; ++p) {
             clock_t iter_start = clock();
             
@@ -255,19 +277,23 @@ int main() {
             if (fabs(dir.y()) > 0.9f) up = vec3(1, 0, 0);
             vec3 u_vec = unit_vector(cross(up, dir)) * grid_size;
             vec3 v_vec = unit_vector(cross(dir, u_vec)) * grid_size;
-            vec3 llc = (dir * distance_offset) - 0.5f * u_vec - 0.5f * v_vec;
+            vec3 llc = (dir * distance_offset) - 0.5f * u_vec - 0.5f * v_vec; // here we move the lower left corner around
 
             accum->x = 0.0f; accum->y = 0.0f;
 
+            // we launch the rays
             launcher<<<blocks, threads>>>(hit_pos, hit_normal, hit_dist, hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
             cudaDeviceSynchronize();
 
+            // we compute the PO integral for the scattered field
             integral_PO<<<(N+255)/256, 256>>>(hit_pos, hit_normal, hit_dist, hit_flag, N, k, ray_dir, ray_area, accum);
             cudaDeviceSynchronize();
 
-            float sigma = 4.0f * M_PI * (accum->x * accum->x + accum->y * accum->y);
-            float rcs_dBsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));
+            // we accumulate the fields
+            float sigma = 4.0f * M_PI * (accum->x * accum->x + accum->y * accum->y);        // RCS in m^2
+            float rcs_dBsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));                          // RCS in dBsm
 
+            // write in .csv for plotting
             outFile << theta_deg << "," << phi_deg << "," << sigma << "," << rcs_dBsm << "\n";
             
             clock_t iter_end = clock();
@@ -286,12 +312,14 @@ int main() {
     double total_time = double(total_sweep_end - total_sweep_start) / CLOCKS_PER_SEC;
     printEndSeparator();
 
+    // summary
     printSeparator("PERFORMANCE SUMMARY");
     printKV(" Total Sweep Time", formatTime(total_time));
     printKV(" Total Points", total_iterations);
     printKV(" Average Time/Point", formatTime(total_time / total_iterations));
     printEndSeparator();
 
+    // free memory
     printSeparator("CLEANUP");
     free_world<<<1,1>>>(d_list, d_world);
     cudaDeviceSynchronize();
