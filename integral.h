@@ -1,5 +1,9 @@
 /*
 
+
+THIS IS NOT USED !!! Was just for reference
+
+
 This code needs a few things:
 
 1) "rayPool" class

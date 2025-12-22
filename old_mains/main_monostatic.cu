@@ -35,25 +35,14 @@ void printGPUInfo() {
     cudaDeviceProp prop;
     int deviceCount;
     cudaGetDeviceCount(&deviceCount);
-    
-    if (deviceCount == 0) {
-        std::cerr << "No CUDA-capable devices found\n";
-        return;
-    }
-    
+    if (deviceCount == 0) return;
     cudaGetDeviceProperties(&prop, 0);
-    
     std::cerr << "╔═══════════════════════════════════════════════════╗\n";
     std::cerr << "║                   GPU INFORMATION                 ║\n";
     std::cerr << "╠═══════════════════════════════════════════════════╣\n";
     std::cerr << "║ Device: " << prop.name << "\n";
-    std::cerr << "║ Compute Capability: " << prop.major << "." << prop.minor << "\n";
-    std::cerr << "║ Total Global Memory: " 
-              << prop.totalGlobalMem / (1024 * 1024 * 1024.0) << " GB\n";
-    std::cerr << "║ Multiprocessors: " << prop.multiProcessorCount << "\n";
-    std::cerr << "║ Max Threads per Block: " << prop.maxThreadsPerBlock << "\n";
-    std::cerr << "╚═══════════════════════════════════════════════════╝\n";
-    std::cerr << "\n";
+    std::cerr << "║ Total Global Memory: " << prop.totalGlobalMem / (1024 * 1024 * 1024.0) << " GB\n";
+    std::cerr << "╚═══════════════════════════════════════════════════╝\n\n";
 }
 
 void printSeparator(const std::string& title = "") {
@@ -75,52 +64,17 @@ std::string formatTime(double seconds) {
     return std::to_string(seconds) + " s";
 }
 
-// Helper: Simple Key-Value Parser
-std::map<std::string, float> loadConfig(const std::string& filename) {
-    std::map<std::string, float> config;
-    std::ifstream file(filename);
-    std::string line;
-
-    if (!file.is_open()) {
-        std::cerr << "Warning: Could not open " << filename << ". Using defaults." << std::endl;
-        return config;
-    }
-
-    while (std::getline(file, line)) {
-        // 1. Strip out comments (anything after #)
-        size_t commentPos = line.find('#');
-        if (commentPos != std::string::npos) {
-            line = line.substr(0, commentPos);
-        }
-
-        // 2. Extract key and value from the remaining string
-        std::stringstream ss(line);
-        std::string key;
-        float value;
-        if (ss >> key >> value) {
-            config[key] = value;
-        }
-    }
-    return file.close(), config;
-}
-
 // --- KERNELS ---
 
 __global__ void launcher(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* hit_flag, int nx, int ny, vec3 llc, vec3 horiz, vec3 vert, vec3 ray_dir, hitable** world) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-
-    if (i >= nx || j >= ny) return; // check we in the range
+    if (i >= nx || j >= ny) return;
     int idx = j * nx + i;
-
     float u = (i + 0.5f) / float(nx);
     float v = (j + 0.5f) / float(ny);
-
-    vec3 ray_start = llc + u * horiz + v * vert; // start the ray launch
-
+    vec3 ray_start = llc + u * horiz + v * vert;
     ray r(ray_start, ray_dir);
-
-    // now here we still only allow for 1 hit
     hit_record rec;
     if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
         hit_flag[idx] = 1; hit_pos[idx] = rec.p; hit_normal[idx] = rec.normal; hit_dist[idx] = rec.t;
@@ -129,39 +83,19 @@ __global__ void launcher(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* 
 
 __global__ void integral_PO(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* hit_flag, int n, float k, vec3 k_inc, float ray_area, cuFloatComplex* accum) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    // physical optics integration !
-
     if (idx >= n || !hit_flag[idx]) return;
-
-    // 1. Obliquity factor: In monostatic backscatter, this is dot(n, -k_inc)
-    float cos_theta = dot(hit_normal[idx], -k_inc);
-    if (cos_theta <= 0.0f) return;
-
-    // 2. Monostatic Phase
+    if (dot(hit_normal[idx], -k_inc) <= 0.0f) return;
     float phase = 2.0f * k * hit_dist[idx];
     cuFloatComplex e = make_cuFloatComplex(cosf(phase), sinf(phase));
-
-    // 3. THE FIX: Multiply by 2.0f because J = 2 * (n x H)
-    // The standard PO factor is (j * k / (4 * PI)) * 2.0
-    float mag = (k * ray_area / (4.0f * M_PI)) * 2.0f; // it was missing the 2.0 here
-    
-    // Optional: If you want to be extremely precise with curvature, 
-    // some include the cos_theta here, but with a flat ray-grid, 
-    // ray_area is already the 'projected' area.
-    
-    cuFloatComplex contrib = make_cuFloatComplex(-mag * sinf(phase), mag * cosf(phase)); // representing j * factor * exp(j*phase)
-
+    cuFloatComplex factor = make_cuFloatComplex(0.0f, k * ray_area / (4.0f * M_PI));
+    cuFloatComplex contrib = cuCmulf(e, factor);
     atomicAdd(&accum->x, contrib.x);
     atomicAdd(&accum->y, contrib.y);
 }
 
-
-// @@ here we need something more well done
-// like a configuration file or something like that
 __global__ void create_world(hitable** d_list, hitable** d_world) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
-        d_list[0] = new sphere(vec3(0.0f, 0.0f, 0.0f), 1.0f); // we center our object at (0.0f, 0.0f, 0.0f) !!
+        d_list[0] = new sphere(vec3(0.0f, 0.0f, 0.0f), 1.0f);
         *d_world  = new hitable_list(d_list, 1);
     }
 }
@@ -174,7 +108,7 @@ __global__ void free_world(hitable** d_list, hitable** d_world) {
 
 int main() {
     std::cerr << "╔═══════════════════════════════════════════════════╗\n";
-    std::cerr << "║  MONOSTATIC RCS SWEEP - SHOOTING & BOUNCING RAYS  ║\n";
+    std::cerr << "║      MONOSTATIC RCS SWEEP - PHYSICAL OPTICS       ║\n";
     std::cerr << "╚═══════════════════════════════════════════════════╝\n";
     
     printGPUInfo();
@@ -202,12 +136,8 @@ int main() {
     printSeparator("SIMULATION PARAMETERS");
     printKV("Frequency", freq / 1e9, "GHz");
     printKV("Wavelength", lambda * 1000, "mm");
-    printKV("Wave Number k", k, "rad/m");
-    printKV("Illumination Area", grid_size * grid_size, "m² (make sure this is larger than your world objects)");
     printKV("Grid Size", std::to_string(nx) + "x" + std::to_string(ny));
     printKV("Total Rays", N);
-    printKV("Ray Density", N / (grid_size * grid_size), "rays/m² (make sure this is dense enough)");
-    printKV("Ray Area", ray_area, "m²");
     printKV("Phi Range", std::to_string(phi_start) + " to " + std::to_string(phi_end));
     printEndSeparator();
 
@@ -273,7 +203,7 @@ int main() {
             clock_t iter_end = clock();
             double iter_time = double(iter_end - iter_start) / CLOCKS_PER_SEC;
             
-            std::cerr  << "│  Point " << std::setw(3) << total_iterations + 1 
+            std::cerr << "│  Point " << std::setw(3) << total_iterations + 1 
                       << " | Phi: " << std::setw(6) << phi_deg 
                       << " | Theta: " << std::setw(6) << theta_deg 
                       << " | Time: " << formatTime(iter_time) << "\n";
@@ -287,9 +217,9 @@ int main() {
     printEndSeparator();
 
     printSeparator("PERFORMANCE SUMMARY");
-    printKV(" Total Sweep Time", formatTime(total_time));
-    printKV(" Total Points", total_iterations);
-    printKV(" Average Time/Point", formatTime(total_time / total_iterations));
+    printKV("Total Sweep Time", formatTime(total_time));
+    printKV("Total Points", total_iterations);
+    printKV("Average Time/Point", formatTime(total_time / total_iterations));
     printEndSeparator();
 
     printSeparator("CLEANUP");
