@@ -1,8 +1,30 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+import argparse
 
-plot_dbsm = True  # Set to False to plot m^2 and the average line
+
+parser = argparse.ArgumentParser(description="Plot RCS in dBsm or m^2")
+parser.add_argument(
+    'mode', 
+    nargs='?',  # optional positional argument
+    choices=['dbsm', 'm2'],  # allowed values
+    default='dbsm',  # default if nothing is provided
+    help="Choose 'dbsm' to plot in dBsm (default) or 'm2' to plot in m^2"
+)
+
+args = parser.parse_args()
+
+# Determine the plotting mode
+plot_dbsm = args.mode == 'dbsm'
+
+print()
+
+# Print the mode
+if plot_dbsm:
+    print("Plotting RCS in dBsm")
+else:
+    print("Plotting RCS in m^2")
 
 def get_next_filename(base_path, filename_base, extension):
     i = 1
@@ -67,9 +89,11 @@ output_path = get_next_filename("results_sphere", "rcs_plot", "png")
 plt.savefig(output_path, dpi=300, bbox_inches='tight')
 
 print()
-print(f"- - - - - Plot saved to {output_path} - - - - -")
 if not plot_dbsm:
     print(f"Computed Average RCS: {avg_rcs:.4f} m^2")
+    print()
+
+print(f"- - - - - Plot saved to {output_path} - - - - -")
 print()
 
 plt.show()

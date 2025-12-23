@@ -127,8 +127,65 @@ __global__ void launcher(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* 
     // now here we still only allow for 1 hit
     hit_record rec;
     if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
-        hit_flag[idx] = 1; hit_pos[idx] = rec.p; hit_normal[idx] = rec.normal; hit_dist[idx] = rec.t;
+
+        hit_flag[idx] = 1; 
+        hit_pos[idx] = rec.p; 
+        hit_normal[idx] = rec.normal; 
+        hit_dist[idx] = rec.t;
+
     } else { hit_flag[idx] = 0; }
+}
+
+__global__ void launcher_multibounce(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* hit_count, int nx, int ny, vec3 llc, vec3 horiz, vec3 vert, vec3 ray_dir, hitable** world, int max_bounces) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (i >= nx || j >= ny) return;
+    int idx = j * nx + i;
+
+    float u = (i + 0.5f) / float(nx);
+    float v = (j + 0.5f) / float(ny);
+
+    vec3 current_origin = llc + u * horiz + v * vert;
+    vec3 current_dir = ray_dir; 
+    
+    // hit_flag[idx] = 0;
+    hit_dist[idx] = 0.0f;
+    hit_count[idx] = 0;
+
+    for (int k = 0; k < max_bounces; k++) {
+        ray r(current_origin, current_dir);
+        hit_record rec;
+
+        if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
+            // hit_flag[idx] = 1;
+            hit_count[idx]++;
+            
+            // Store the very first hit position/normal for the buffer
+            if (k == 0) {
+                hit_pos[idx] = rec.p;
+                hit_normal[idx] = rec.normal;
+            }
+
+            hit_dist[idx] += rec.t;
+
+            // Update for next bounce
+            // Example: Simple reflection logic
+            current_origin = rec.p; 
+
+            /*
+            __device__ vec3 reflect(const vec3& i, const vec3& n) {
+                // i = incident vector
+                // n = normal vector (must be normalized)
+                return i - 2.0f * dot(i, n) * n;
+            }
+            */
+            current_dir = current_dir - 2.0f * dot(current_dir, rec.normal) * rec.normal;
+
+        } else {
+            break; // Ray missed everything, stop bouncing
+        }
+    }
 }
 
 __global__ void integral_PO(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* hit_flag, int n, float k, vec3 k_inc, float ray_area, cuFloatComplex* accum) {
@@ -153,11 +210,44 @@ __global__ void integral_PO(vec3* hit_pos, vec3* hit_normal, float* hit_dist, in
     // Optional: If you want to be extremely precise with curvature, 
     // some include the cos_theta here, but with a flat ray-grid, 
     // ray_area is already the 'projected' area.
+    // @@ here we dont consider the ray area diverging
     
     cuFloatComplex contrib = make_cuFloatComplex(-mag * sinf(phase), mag * cosf(phase)); // representing j * factor * exp(j*phase)
 
-    atomicAdd(&accum->x, contrib.x);
-    atomicAdd(&accum->y, contrib.y);
+    atomicAdd(&accum->x, contrib.x);    // real part 
+    atomicAdd(&accum->y, contrib.y);    // imaginary part
+}
+
+__global__ void integral_PO_multibounce(vec3* hit_pos, vec3* hit_normal, float* hit_dist, int* hit_count, int n, float k, vec3 k_inc, float ray_area, cuFloatComplex* accum, float reflection_const) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // physical optics integration !
+
+    if (idx >= n || hit_count[idx] == 0) return;
+
+    float total_refl_coeff = powf(reflection_const, (float)hit_count[idx]);
+
+    // 1. Obliquity factor: In monostatic backscatter, this is dot(n, -k_inc)
+    float cos_theta = dot(hit_normal[idx], -k_inc);
+    if (cos_theta <= 0.0f) return;
+
+    // 2. Monostatic Phase
+    float phase = 2.0f * k * hit_dist[idx];
+    cuFloatComplex e = make_cuFloatComplex(cosf(phase), sinf(phase));
+
+    // 3. THE FIX: Multiply by 2.0f because J = 2 * (n x H)
+    // The standard PO factor is (j * k / (4 * PI)) * 2.0
+    float mag = (k * ray_area / (4.0f * M_PI)) * 2.0f * total_refl_coeff; // it was missing the 2.0 here
+    
+    // Optional: If you want to be extremely precise with curvature, 
+    // some include the cos_theta here, but with a flat ray-grid, 
+    // ray_area is already the 'projected' area.
+    // @@ here we dont consider the ray area diverging
+    
+    cuFloatComplex contrib = make_cuFloatComplex(-mag * sinf(phase), mag * cosf(phase)); // representing j * factor * exp(j*phase)
+
+    atomicAdd(&accum->x, contrib.x);    // real part 
+    atomicAdd(&accum->y, contrib.y);    // imaginary part
 }
 
 
@@ -167,6 +257,10 @@ __global__ void create_world(hitable** d_list, hitable** d_world) {
     if (threadIdx.x == 0 && blockIdx.x == 0) {
         d_list[0] = new sphere(vec3(0.0f, 0.0f, 0.0f), 1.0f); // we center our object at (0.0f, 0.0f, 0.0f) !!
         *d_world  = new hitable_list(d_list, 1);
+
+        // d_list[0] = new sphere(vec3(1.2f, 0.0f, 0.0f), 0.5f);
+        // d_list[1] = new sphere(vec3(-1.2f, 0.0f, 0.0f), 0.5f);
+        // *d_world  = new hitable_list(d_list, 2);
     }
 }
 
@@ -198,6 +292,8 @@ int main() {
     float grid_size = cfg.count("grid_size") ? cfg["grid_size"] : 3.0f;
     int nx          = cfg.count("nx")        ? (int)cfg["nx"]   : 400;
     int ny          = cfg.count("ny")        ? (int)cfg["ny"]   : 400;
+    int max_bounces = cfg.count("max_bounces")    ? (int)cfg["max_bounces"]   : 20;
+    float reflection_const = cfg.count("reflection_const")    ? (int)cfg["reflection_const"] : 1.0;
 
     // constants
     const float c0 = 299792458.0f;
@@ -224,11 +320,15 @@ int main() {
 
     // our buffers to save all the data
     printSeparator("MEMORY ALLOCATION");
-    vec3 *hit_pos, *hit_normal; float *hit_dist; int *hit_flag; cuFloatComplex *accum;
+    vec3 *hit_pos, *hit_normal; 
+    float *hit_dist; 
+    int *hit_flag, *hit_count; 
+    cuFloatComplex *accum;
     checkCudaErrors(cudaMallocManaged(&hit_pos, N * sizeof(vec3)));
     checkCudaErrors(cudaMallocManaged(&hit_normal, N * sizeof(vec3)));
     checkCudaErrors(cudaMallocManaged(&hit_dist, N * sizeof(float)));
     checkCudaErrors(cudaMallocManaged(&hit_flag, N * sizeof(int)));
+    checkCudaErrors(cudaMallocManaged(&hit_count, N * sizeof(int)));
     checkCudaErrors(cudaMallocManaged(&accum, sizeof(cuFloatComplex)));
 
     // our world of hitable objects
@@ -279,14 +379,29 @@ int main() {
             vec3 v_vec = unit_vector(cross(dir, u_vec)) * grid_size;
             vec3 llc = (dir * distance_offset) - 0.5f * u_vec - 0.5f * v_vec; // here we move the lower left corner around
 
-            accum->x = 0.0f; accum->y = 0.0f;
+            accum->x = 0.0f; 
+            accum->y = 0.0f;
 
             // we launch the rays
-            launcher<<<blocks, threads>>>(hit_pos, hit_normal, hit_dist, hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
+
+            // 1) single reflection
+            // launcher<<<blocks, threads>>>(hit_pos, hit_normal, hit_dist, hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
+            // cudaDeviceSynchronize();
+
+
+            // 2) multiple reflection
+            launcher_multibounce<<<blocks, threads>>>(hit_pos, hit_normal, hit_dist, hit_count, nx, ny, llc, u_vec, v_vec, ray_dir, d_world, max_bounces);
             cudaDeviceSynchronize();
 
             // we compute the PO integral for the scattered field
-            integral_PO<<<(N+255)/256, 256>>>(hit_pos, hit_normal, hit_dist, hit_flag, N, k, ray_dir, ray_area, accum);
+
+            // 1) single reflection
+            // integral_PO<<<(N+255)/256, 256>>>(hit_pos, hit_normal, hit_dist, hit_flag, N, k, ray_dir, ray_area, accum);
+            // cudaDeviceSynchronize();
+
+
+            // 2) multiple reflection
+            integral_PO_multibounce<<<(N+255)/256, 256>>>(hit_pos, hit_normal, hit_dist, hit_count, N, k, ray_dir, ray_area, accum, reflection_const);
             cudaDeviceSynchronize();
 
             // we accumulate the fields
@@ -298,12 +413,39 @@ int main() {
             
             clock_t iter_end = clock();
             double iter_time = double(iter_end - iter_start) / CLOCKS_PER_SEC;
-            
-            std::cerr  << "│  Point " << std::setw(3) << total_iterations + 1 
-                      << " | Phi: " << std::setw(6) << phi_deg 
-                      << " | Theta: " << std::setw(6) << theta_deg 
-                      << " | Time: " << formatTime(iter_time) << "\n";
-            
+
+
+            // @@ this can be done more efficiently
+            // Stats regarding the hit count
+            int max_h = 0;
+            int zero_count = 0;
+            long long sum_hits = 0; // 64 bit integer
+            int non_zero_count = 0;
+
+            for (int n = 0; n < N; n++) {
+                int val = hit_count[n];
+                if (val == 0) {
+                    zero_count++;
+                } else {
+                    if (val > max_h) max_h = val;
+                    sum_hits += val;
+                    non_zero_count++;
+                }
+            }
+
+            float avg_hits = (non_zero_count > 0) ? (float)sum_hits / non_zero_count : 0.0f;
+
+            // prints
+            std::cerr << "[" << std::setw(3) << total_iterations + 1 << "/" << phi_samples * theta_samples << "]"
+                << " | Θ: " << std::setw(3) << (int)theta_deg << "°"
+                << " | Φ: " << std::setw(3) << (int)phi_deg << "°"
+                << " | " << formatTime(iter_time) 
+                << " | Hit %: " << std::setprecision(1) << 100.0f - (100.0f * zero_count / N)  << "%" 
+                << " | Avg of bounces: " << std::fixed << std::setprecision(2) << avg_hits // not counting zero bounces
+                << " | Max bounces: " << max_h << " (" << max_bounces << ")"
+                << "\n";
+
+                        
             total_iterations++;
         }
     }
@@ -325,8 +467,35 @@ int main() {
     cudaDeviceSynchronize();
     cudaFree(hit_pos); cudaFree(hit_normal); cudaFree(hit_dist);
     cudaFree(hit_flag); cudaFree(accum); cudaFree(d_list); cudaFree(d_world);
+    cudaFree(hit_count);
     std::cerr << "│  Device memory released. Success.\n";
     printEndSeparator();
 
     return 0;
 }
+
+
+
+
+/*
+
+Some TODOs:
+
+- Make geometry reading more general
+- Due to low precision there is a dependency of the results with the frequency which is problematic...
+- Verify results for double sphere with thesis
+- check result for the sphere with results at: https://www.flexcompute.com/tidy3d/examples/notebooks/PECSphereRCS/ (Mie series)
+    i.  Make sure to do in 3D
+    ii. Can we also get analytical results for the 2-sphere system? Not really, but can compare with other simulations
+- issue: for the sphere there should be multiple hits (max value should always be 1...), maybe set a threshold ?
+
+- also get an optimized Makefile for:
+    a. debugging / profiling
+    b. with optimization flags
+
+- for the CUDA part i believe there could be a lot of omtimization that can be done!
+
+
+
+
+*/
