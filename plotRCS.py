@@ -2,7 +2,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import argparse
+import csv
 
+save_data_scans = True # only if we are doing parameter scans
 
 parser = argparse.ArgumentParser(description="Plot RCS in dBsm or m^2")
 parser.add_argument(
@@ -42,6 +44,8 @@ with open('rcs_results.csv', 'r') as f:
             metadata.append(line.replace('#', '').strip())
         else:
             break
+freq_str = metadata[0].replace("Frequency: ", "").replace(" Hz", "")
+frequency = float(freq_str)
 
 # 2. Load Data
 df = pd.read_csv('rcs_results.csv', comment='#')
@@ -92,6 +96,15 @@ print()
 if not plot_dbsm:
     print(f"Computed Average RCS: {avg_rcs:.4f} m^2")
     print()
+
+    if save_data_scans:
+        filename_scan = "results_freq_scans.csv"
+        with open(filename_scan, "a", newline='') as f:
+            writer = csv.writer(f)
+            # Check if file is empty to write header
+            if f.tell() == 0:
+                writer.writerow(["Frequency", "Avg_RCS"])
+            writer.writerow([frequency, avg_rcs])
 
 print(f"- - - - - Plot saved to {output_path} - - - - -")
 print()

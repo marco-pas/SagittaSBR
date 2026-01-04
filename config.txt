@@ -2,15 +2,24 @@
 
 phi_start 0.0           # starting phi angle
 phi_end 180.0           # final phi angle
-phi_samples 181         # number of samples in phi
+phi_samples 30         # number of samples in phi
 theta_start 90.0        # starting theta angle
 theta_end 90.0          # final theta angle
 theta_samples 1         # number of samples in theta
 freq 10.0e9             # freq of the waves
-grid_size 2.2           # width and length for our launcher
-nx 12000                # points in x
-ny 12000                # points in y
+grid_size 2.5           # width W and length L for our launcher (it is a square), this has a distance "distance_offset" from the center
+nx 10000                # points in x
+ny 10000                # points in y
+max_bounces 20          # maximum hits that each ray can have
+reflection_const 1.0    # PEC
 
 # for a sphere of radius 0.5, using a grid_size of 5.0
 # we use nx = ny = 10000 to 15000, giving us a density
 # of 9e+06 rays/m², which makes it converge
+
+
+# sphere is centered at (0,0,0) with r = 1
+# then 4.77134516e+07 9.54269032e+07 1.43140355e+08 1.90853806e+08
+# 2.38567258e+08 2.86280710e+08 3.33994161e+08 3.81707613e+08
+# 4.29421064e+08 4.77134516e+08 9.54269032e+09 2.38567258e+10
+ 4.77134516e+10 9.54269032e+10 2.38567258e+11

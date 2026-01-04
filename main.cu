@@ -7,6 +7,7 @@
 #include <cfloat>
 #include <string>
 #include <iomanip>
+#include <cstdlib>
 
 #include <cuda_runtime.h>
 #include <cuComplex.h>
@@ -270,7 +271,7 @@ __global__ void free_world(hitable** d_list, hitable** d_world) {
 
 // --- MAIN ---
 
-int main() {
+int main(int argc, char** argv) {
     std::cerr << "╔═══════════════════════════════════════════════════╗\n";
     std::cerr << "║  MONOSTATIC RCS SWEEP - SHOOTING & BOUNCING RAYS  ║\n";
     std::cerr << "╚═══════════════════════════════════════════════════╝\n";
@@ -288,12 +289,27 @@ int main() {
     float theta_start = cfg.count("theta_start") ? cfg["theta_start"] : 90.0f;
     float theta_end   = cfg.count("theta_end")   ? cfg["theta_end"]   : 90.0f;
     int theta_samples = cfg.count("theta_samples") ? (int)cfg["theta_samples"] : 1;
-    float freq      = cfg.count("freq")      ? cfg["freq"]      : 10.0e9f;
     float grid_size = cfg.count("grid_size") ? cfg["grid_size"] : 3.0f;
     int nx          = cfg.count("nx")        ? (int)cfg["nx"]   : 400;
     int ny          = cfg.count("ny")        ? (int)cfg["ny"]   : 400;
     int max_bounces = cfg.count("max_bounces")    ? (int)cfg["max_bounces"]   : 20;
     float reflection_const = cfg.count("reflection_const")    ? (int)cfg["reflection_const"] : 1.0;
+    
+    // for the frequency we do in a different way so that we can do scans
+    // float freq      = cfg.count("freq")      ? cfg["freq"]      : 10.0e9f;
+    float freq;
+    if (argc > 1) {
+        // Frequency passed from command line
+        freq = std::atof(argv[1]);
+        std::cout << "Using frequency from command line: " << freq << " Hz\n";
+    } else if (cfg.count("freq")) {
+        freq = cfg["freq"];
+        std::cout << "Using frequency from config file: " << freq << " Hz\n";
+    } else {
+        freq = 10.0e9f;
+        std::cout << "Using default frequency: " << freq << " Hz\n";
+    }
+    // - - - - - - -
 
     // constants
     const float c0 = 299792458.0f;

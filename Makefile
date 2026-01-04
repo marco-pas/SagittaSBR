@@ -10,7 +10,7 @@ NVCCFLAGS      = $(NVCC_DBG) -m64
 GENCODE_FLAGS  = -gencode arch=compute_80,code=sm_80
 
 SRCS = main.cu
-INCS = vec3.h ray.h hitable.h hitable_list.h sphere.h box.h
+INCS = vec3.h ray.h hitable.h hitable_list.h sphere.h # box.h
 
 TARGET = SBR
 OBJ    = SBR.o
