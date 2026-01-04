@@ -29,7 +29,7 @@ Modify `config.txt` to set up the simulation options.
 ./SBR
 ```
 
-Optional arguments: `./SBR 1.0e9` to directly specify the frequency without modifying config.txt.
+Optional arguments: `./SBR 1.0e9` to directly specify the frequency without modifying `config.txt`.
 
 ## Visualization
 
