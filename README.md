@@ -78,13 +78,19 @@ python3 tools/plotRCS.py
 Plot Radar Cross Section (RCS) results from output/rcs_results.csv.
 
 Command-line options:
+
   --unit   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
+  
   --plot   : Enable or disable plot saving/display (True/False), default True
+  
   --scans  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
+
   `python3 tools/plotRCS.py`
+  
   `python3 tools/plotRCS.py --unit=m2`
+  
   `python3 tools/plotRCS.py --plot=False --scans=True --unit=m2`
 
 ---
@@ -105,15 +111,25 @@ from Mie scattering for a PEC sphere.
 ## Directory Layout
 
 .
+
 ├── include/              # Header files (C++ and CUDA). Non-inline functions are defined in src/
+
 ├── src/                  # Implementation files
+
 ├── build/                # Build artifacts (generated)
+
 ├── bin/                  # Compiled executable (generated)
+
 ├── Makefile              # Build system
+
 ├── config.txt            # Simulation parameters
+
 ├── tools/                # Plotting scripts and scan utilities
+
 ├── output/               # Output CSV files
+
 ├── data/                 # More complex hittables (WIP)
+
 └── extra/                # Old or auxiliary files
 
 ---
@@ -122,6 +138,7 @@ from Mie scattering for a PEC sphere.
 
 - If you change any functions in `src/`, make sure to update the corresponding
   declarations in `include/`.
+  
 - Always run simulations from the project root directory to avoid issues
   with relative paths.
 
