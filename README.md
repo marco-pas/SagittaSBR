@@ -79,11 +79,11 @@ Plot Radar Cross Section (RCS) results from output/rcs_results.csv.
 
 Command-line options:
 
-  --unit   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
+  `--unit`   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
   
-  --plot   : Enable or disable plot saving/display (True/False), default True
+  `--plot`   : Enable or disable plot saving/display (True/False), default True
   
-  --scans  : Enable saving averaged RCS data for parameter scans, default False
+  `--scans`  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
 
