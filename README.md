@@ -39,10 +39,11 @@ make help
 Modify `config.txt` to set the simulation options.
 You can use `#` to comment out lines.
 If an option is missing, the code will fall back to hard-coded default values
-defined in `src/main`.
+defined in `src/main`. 
 
 The current version does not yet implement BVH acceleration or mesh support.
 To change the positioning of objects (e.g., a sphere), modify the hard-coded values in `src/world_setup.cu`.
+
 ---
 
 ## Execution
