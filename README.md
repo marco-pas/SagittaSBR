@@ -110,27 +110,20 @@ from Mie scattering for a PEC sphere.
 
 ## Directory Layout
 
+```bash
 .
-
 ├── include/              # Header files (C++ and CUDA). Non-inline functions are defined in src/
-
 ├── src/                  # Implementation files
-
 ├── build/                # Build artifacts (generated)
-
 ├── bin/                  # Compiled executable (generated)
-
 ├── Makefile              # Build system
-
 ├── config.txt            # Simulation parameters
-
 ├── tools/                # Plotting scripts and scan utilities
-
 ├── output/               # Output CSV files
-
 ├── data/                 # More complex hittables (WIP)
-
 └── extra/                # Old or auxiliary files
+```
+
 
 ---
 
