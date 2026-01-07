@@ -1,17 +1,9 @@
-#ifndef SPHEREH
-#define SPHEREH
+/*
+* Implementation of sphere class methods for ray-sphere intersections.
+*/
 
-#include "hitable.h"
-
-class sphere: public hitable  {
-    public:
-        __device__ sphere() {}
-        __device__ sphere(vec3 cen, float r) : center(cen), radius(r)  {};
-        __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
-        vec3 center;
-        float radius;
-};
-
+#include "sphere.h"
+#include <cmath>
 
 // here the hit for the sphere is implemented
 // different object, different hit
@@ -43,6 +35,3 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
     }
     return false;
 }
-
-
-#endif

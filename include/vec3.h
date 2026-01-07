@@ -7,16 +7,10 @@
 
 class vec3  {
 
-
 /* 
-
-__host__ __device__ tells the compiler to produce a CPU version and GPU version
-
-In this version we use "float" instead of "double"!
-
+__host__ __device__ tells compiler to produce a CPU version and GPU version
+with "inline" no need to have the deinition in src/
 */
-
-
 
 public:
     __host__ __device__ vec3() {}

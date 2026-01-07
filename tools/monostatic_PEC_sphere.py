@@ -6,15 +6,8 @@ import csv
 from scipy.special import spherical_jn, spherical_yn
 
 def normalized_rcs(rel_freq):
-    """
-    Calculate the monostatic RCS of a PEC sphere normalized by πr².
 
-    Parameters:
-    relative_frequency (float): The relative frequency (2πr/λ), unitless.
-
-    Returns:
-    float: Normalized RCS (σ / πr²), unitless.
-    """
+    # Analytical results
 
     if rel_freq <= 0:
         return 0.0
@@ -61,7 +54,7 @@ r = 1
 frequencies = []
 results = []
 
-with open("results_freq_scans.csv", "r") as csvfile:
+with open("output/results_freq_scans.csv", "r") as csvfile:
     reader = csv.DictReader(csvfile)
     for row in reader:
         frequencies.append(float(row["Frequency"]))
@@ -97,10 +90,10 @@ plt.grid(True, which='both', alpha=0.3)
 #          transform=plt.gca().transAxes, fontsize=12,
 #          verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-folder = "./benchmark_sphere"
+folder = "tools/benchmark_sphere"
 os.makedirs(folder, exist_ok=True)
 
-plt.savefig(os.path.join(folder, "rcs_comparison.png"),
+plt.savefig(os.path.join(folder,"rcs_comparison.png"),
             dpi=300, bbox_inches="tight")
 
 print(f"\nPlot saved to: {os.path.join(folder, 'rcs_comparison.png')}")
