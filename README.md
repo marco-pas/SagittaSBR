@@ -41,15 +41,21 @@ You can use `#` to comment out lines.
 If an option is missing, the code will fall back to hard-coded default values
 defined in `src/main`.
 
+The current version does not yet implement BVH acceleration or mesh support.
+To change the positioning of objects (e.g., a sphere), modify the hard-coded values in `src/world_setup.cu`.
 ---
 
 ## Execution
 
+```bash
 ./bin/SagittaSBR
+```
 
 Optional argument:
 
+```bash
 ./bin/SagittaSBR 1.0e9
+```
 
 This directly specifies the frequency (in Hz) without modifying `config.txt`.
 
@@ -57,12 +63,14 @@ This directly specifies the frequency (in Hz) without modifying `config.txt`.
 
 ## Visualization
 
-To plot the RCS as a function of the azimuthal angle φ,
+To plot the RCS as a function of the azimuthal angle $\varphi$,
 use the provided Python script.
 Make sure all required Python packages are installed;
 using a Python virtual environment is recommended.
 
+```bash
 python3 tools/plotRCS.py
+```
 
 ### Optional arguments
 
@@ -74,9 +82,9 @@ Command-line options:
   --scans  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
-  python3 tools/plotRCS.py
-  python3 tools/plotRCS.py --unit=m2
-  python3 tools/plotRCS.py --plot=False --scans=True --unit=m2
+  `python3 tools/plotRCS.py`
+  `python3 tools/plotRCS.py --unit=m2`
+  `python3 tools/plotRCS.py --plot=False --scans=True --unit=m2`
 
 ---
 
@@ -87,7 +95,9 @@ This script runs simulations at multiple frequencies, saves the data for each ru
 and then produces a final Python plot together with analytical results obtained
 from Mie scattering for a PEC sphere.
 
+```bash
 ./tools/run_freq_scan.sh
+```
 
 ---
 
