@@ -22,15 +22,17 @@ to match your GPU architecture.
 
 ### Compilation
 
+```bash
 make clean
 make
+```
 
 The compilation generates object files (.o) in `build/`,
 while the executable is placed in the `bin/` directory.
 
 You can see the available Makefile options by running:
 
-make help
+`make help`
 
 ---
 
@@ -39,10 +41,11 @@ make help
 Modify `config.txt` to set the simulation options.
 You can use `#` to comment out lines.
 If an option is missing, the code will fall back to hard-coded default values
-defined in `src/main`.
+defined in `src/main`. 
 
 The current version does not yet implement BVH acceleration or mesh support.
 To change the positioning of objects (e.g., a sphere), modify the hard-coded values in `src/world_setup.cu`.
+
 ---
 
 ## Execution
@@ -77,13 +80,19 @@ python3 tools/plotRCS.py
 Plot Radar Cross Section (RCS) results from output/rcs_results.csv.
 
 Command-line options:
-  --unit   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
-  --plot   : Enable or disable plot saving/display (True/False), default True
-  --scans  : Enable saving averaged RCS data for parameter scans, default False
+
+  `--unit`   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
+  
+  `--plot`   : Enable or disable plot saving/display (True/False), default True
+  
+  `--scans`  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
+
   `python3 tools/plotRCS.py`
+  
   `python3 tools/plotRCS.py --unit=m2`
+  
   `python3 tools/plotRCS.py --plot=False --scans=True --unit=m2`
 
 ---
@@ -103,6 +112,7 @@ from Mie scattering for a PEC sphere.
 
 ## Directory Layout
 
+```bash
 .
 ├── include/              # Header files (C++ and CUDA). Non-inline functions are defined in src/
 ├── src/                  # Implementation files
@@ -114,6 +124,8 @@ from Mie scattering for a PEC sphere.
 ├── output/               # Output CSV files
 ├── data/                 # More complex hittables (WIP)
 └── extra/                # Old or auxiliary files
+```
+
 
 ---
 
@@ -121,6 +133,7 @@ from Mie scattering for a PEC sphere.
 
 - If you change any functions in `src/`, make sure to update the corresponding
   declarations in `include/`.
+  
 - Always run simulations from the project root directory to avoid issues
   with relative paths.
 
