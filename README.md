@@ -22,15 +22,17 @@ to match your GPU architecture.
 
 ### Compilation
 
+```bash
 make clean
 make
+```
 
 The compilation generates object files (.o) in `build/`,
 while the executable is placed in the `bin/` directory.
 
 You can see the available Makefile options by running:
 
-make help
+`make help`
 
 ---
 
