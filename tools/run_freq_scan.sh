@@ -2,7 +2,9 @@
 
 F_START=5e7
 F_END=1e11
-N=4
+N=10
+
+rm ./output/results_freq_scans.csv
 
 for i in $(seq 0 $((N-1))); do
     freq=$(python3 - <<EOF

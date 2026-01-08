@@ -1,7 +1,6 @@
 /*
  * Main entry point for monostatic RCS sweep simulation using CUDA ray tracing.
  * Implements the Shooting and Bouncing Rays (SBR) method with Physical Optics integration.
- * Explicit memory management
  */
 
 #include <iostream>       // Console I/O
@@ -27,56 +26,6 @@
 #include "ray_kernels.cuh"  // Ray tracing kernels
 #include "po_kernels.cuh"   // Physical Optics integration kernels
 #include "world_setup.cuh"  // Scene/world setup
-
-// Kernel to compute hit statistics on device
-__global__ void compute_hit_stats(int *hit_count, int N, int *max_hits, int *zero_count, long long *sum_hits, int *non_zero_count) {
-    // Use shared memory for reduction
-    __shared__ int s_max[256];
-    __shared__ int s_zero[256];
-    __shared__ long long s_sum[256];
-    __shared__ int s_nonzero[256];
-    
-    int tid = threadIdx.x;
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // Initialize shared memory
-    s_max[tid] = 0;
-    s_zero[tid] = 0;
-    s_sum[tid] = 0;
-    s_nonzero[tid] = 0;
-    
-    // Process elements
-    if (idx < N) {
-        int val = hit_count[idx];
-        if (val == 0) {
-            s_zero[tid] = 1;
-        } else {
-            s_max[tid] = val;
-            s_sum[tid] = val;
-            s_nonzero[tid] = 1;
-        }
-    }
-    __syncthreads();
-    
-    // Reduction in shared memory
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            s_max[tid] = max(s_max[tid], s_max[tid + s]);
-            s_zero[tid] += s_zero[tid + s];
-            s_sum[tid] += s_sum[tid + s];
-            s_nonzero[tid] += s_nonzero[tid + s];
-        }
-        __syncthreads();
-    }
-    
-    // Write block results to global memory
-    if (tid == 0) {
-        atomicMax(max_hits, s_max[0]);
-        atomicAdd(zero_count, s_zero[0]);
-        atomicAdd((unsigned long long*)sum_hits, (unsigned long long)s_sum[0]);
-        atomicAdd(non_zero_count, s_nonzero[0]);
-    }
-}
 
 // Create directory if it doesn't exist
 bool createDirectory(const std::string& path) {
@@ -112,8 +61,8 @@ int main(int argc, char** argv) {
     float theta_end   = cfg.count("theta_end")   ? cfg["theta_end"]   : 90.0f;
     int theta_samples = cfg.count("theta_samples") ? (int)cfg["theta_samples"] : 1;
     float grid_size = cfg.count("grid_size") ? cfg["grid_size"] : 3.0f;
-    int nx          = cfg.count("nx")        ? (int)cfg["nx"]   : 5000;
-    int ny          = cfg.count("ny")        ? (int)cfg["ny"]   : 5000;
+    int nx          = cfg.count("nx")        ? (int)cfg["nx"]   : 400;
+    int ny          = cfg.count("ny")        ? (int)cfg["ny"]   : 400;
     int tpbx        = cfg.count("tpbx")        ? (int)cfg["tpbx"]   : 16;
     int tpby        = cfg.count("tpby")        ? (int)cfg["tpby"]   : 16;
     int max_bounces = cfg.count("max_bounces")    ? (int)cfg["max_bounces"]   : 20;
@@ -153,40 +102,18 @@ int main(int argc, char** argv) {
     printKV("Phi Range", std::to_string(phi_start) + " to " + std::to_string(phi_end));
     printEndSeparator();
 
-    // Memory allocation - EXPLICIT DEVICE MEMORY (NOT UNIFIED MEMORY)
+    // Memory allocation on device
     printSeparator("MEMORY ALLOCATION");
-    vec3 *d_hit_pos, *d_hit_normal; 
-    float *d_hit_dist; 
-    int *d_hit_flag, *d_hit_count; 
-    cuFloatComplex *d_accum;
-    
-    // Device memory allocations
-    checkCudaErrors(cudaMalloc(&d_hit_pos, N * sizeof(vec3)));
-    checkCudaErrors(cudaMalloc(&d_hit_normal, N * sizeof(vec3)));
-    checkCudaErrors(cudaMalloc(&d_hit_dist, N * sizeof(float)));
-    checkCudaErrors(cudaMalloc(&d_hit_flag, N * sizeof(int)));
-    checkCudaErrors(cudaMalloc(&d_hit_count, N * sizeof(int)));
-    checkCudaErrors(cudaMalloc(&d_accum, sizeof(cuFloatComplex)));
-
-    // Pinned host memory for results (faster transfers)
-    cuFloatComplex *h_accum;
-    checkCudaErrors(cudaMallocHost(&h_accum, sizeof(cuFloatComplex)));
-
-    // Device memory for hit statistics
-    int *d_max_hits, *d_zero_count, *d_non_zero_count;
-    long long *d_sum_hits;
-    checkCudaErrors(cudaMalloc(&d_max_hits, sizeof(int)));
-    checkCudaErrors(cudaMalloc(&d_zero_count, sizeof(int)));
-    checkCudaErrors(cudaMalloc(&d_sum_hits, sizeof(long long)));
-    checkCudaErrors(cudaMalloc(&d_non_zero_count, sizeof(int)));
-
-    // Pinned host memory for statistics (faster transfers)
-    int *h_max_hits, *h_zero_count, *h_non_zero_count;
-    long long *h_sum_hits;
-    checkCudaErrors(cudaMallocHost(&h_max_hits, sizeof(int)));
-    checkCudaErrors(cudaMallocHost(&h_zero_count, sizeof(int)));
-    checkCudaErrors(cudaMallocHost(&h_sum_hits, sizeof(long long)));
-    checkCudaErrors(cudaMallocHost(&h_non_zero_count, sizeof(int)));
+    vec3 *hit_pos, *hit_normal; 
+    float *hit_dist; 
+    int *hit_flag, *hit_count; 
+    cuFloatComplex *accum;
+    checkCudaErrors(cudaMallocManaged(&hit_pos, N * sizeof(vec3)));
+    checkCudaErrors(cudaMallocManaged(&hit_normal, N * sizeof(vec3)));
+    checkCudaErrors(cudaMallocManaged(&hit_dist, N * sizeof(float)));
+    checkCudaErrors(cudaMallocManaged(&hit_flag, N * sizeof(int)));
+    checkCudaErrors(cudaMallocManaged(&hit_count, N * sizeof(int)));
+    checkCudaErrors(cudaMallocManaged(&accum, sizeof(cuFloatComplex)));
 
     // Create world of hitable objects
     hitable **d_list, **d_world;
@@ -194,8 +121,7 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaMalloc(&d_world, sizeof(hitable*)));
     create_world<<<1,1>>>(d_list, d_world);
     checkCudaErrors(cudaDeviceSynchronize());
-    std::cerr << "│  Device memory and world setup complete.\n";
-    std::cerr << "│  Using explicit memory management for optimal performance.\n";
+    std::cerr << "│  Managed memory and world setup complete.\n";
     printEndSeparator();
 
     // Create output directory
@@ -229,12 +155,10 @@ int main(int argc, char** argv) {
     outFile << "theta,phi,rcs_m2,rcs_dbsm\n";
 
     // Define threads and blocks for kernel launches
+
     dim3 threads(tpbx, tpby);
     dim3 blocks((nx + tpbx - 1) / tpbx, (ny + tpby - 1) / tpby);
     
-    // Blocks for statistics kernel
-    int stats_threads = 256;
-    int stats_blocks = (N + stats_threads - 1) / stats_threads;
 
     // Execute monostatic RCS sweep
     printSeparator("EXECUTING SWEEP");
@@ -263,49 +187,30 @@ int main(int argc, char** argv) {
             vec3 v_vec = unit_vector(cross(dir, u_vec)) * grid_size;
             vec3 llc = (dir * distance_offset) - 0.5f * u_vec - 0.5f * v_vec;
 
-            // Initialize accumulator on device (no need to transfer)
-            checkCudaErrors(cudaMemset(d_accum, 0, sizeof(cuFloatComplex)));
+            accum->x = 0.0f; 
+            accum->y = 0.0f;
 
             // @@ Launch rays (choose single or multi-bounce)
 
             // Single reflection:
-            // launcher<<<blocks, threads>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
+            // launcher<<<blocks, threads>>>(hit_pos, hit_normal, hit_dist, hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
             
             // Multiple reflections:
-            launcher_multibounce<<<blocks, threads>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_count, nx, ny, llc, u_vec, v_vec, ray_dir, d_world, max_bounces);
+            launcher_multibounce<<<blocks, threads>>>(hit_pos, hit_normal, hit_dist, hit_count, nx, ny, llc, u_vec, v_vec, ray_dir, d_world, max_bounces);
+            cudaDeviceSynchronize();
 
             // @@ Compute PO integral for scattered field
 
             // Single reflection:
-            // integral_PO<<<(N+255)/256, 256>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_flag, N, k, ray_dir, ray_area, d_accum);
+            // integral_PO<<<(N+255)/256, 256>>>(hit_pos, hit_normal, hit_dist, hit_flag, N, k, ray_dir, ray_area, accum);
             
             // Multiple reflections:
-            integral_PO_multibounce<<<(N+255)/256, 256>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_count, N, k, ray_dir, ray_area, d_accum, reflection_const);
-
-            // Copy accumulator result back to host (async for better overlap)
-            checkCudaErrors(cudaMemcpyAsync(h_accum, d_accum, sizeof(cuFloatComplex), cudaMemcpyDeviceToHost));
-
-            // Initialize statistics on device
-            checkCudaErrors(cudaMemset(d_max_hits, 0, sizeof(int)));
-            checkCudaErrors(cudaMemset(d_zero_count, 0, sizeof(int)));
-            checkCudaErrors(cudaMemset(d_sum_hits, 0, sizeof(long long)));
-            checkCudaErrors(cudaMemset(d_non_zero_count, 0, sizeof(int)));
-
-            // Compute hit statistics on device
-            compute_hit_stats<<<stats_blocks, stats_threads>>>(d_hit_count, N, d_max_hits, d_zero_count, d_sum_hits, d_non_zero_count);
-
-            // Copy statistics back to host (async)
-            checkCudaErrors(cudaMemcpyAsync(h_max_hits, d_max_hits, sizeof(int), cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(h_zero_count, d_zero_count, sizeof(int), cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(h_sum_hits, d_sum_hits, sizeof(long long), cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(h_non_zero_count, d_non_zero_count, sizeof(int), cudaMemcpyDeviceToHost));
-
-            // Wait for all operations to complete
-            checkCudaErrors(cudaDeviceSynchronize());
+            integral_PO_multibounce<<<(N+255)/256, 256>>>(hit_pos, hit_normal, hit_dist, hit_count, N, k, ray_dir, ray_area, accum, reflection_const);
+            cudaDeviceSynchronize();
 
             // Compute RCS
-            float sigma = 4.0f * M_PI * (h_accum->x * h_accum->x + h_accum->y * h_accum->y);    // RCS in m^2
-            float rcs_dBsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));                              // RCS in dBsm
+            float sigma = 4.0f * M_PI * (accum->x * accum->x + accum->y * accum->y);    // RCS in m^2
+            float rcs_dBsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));                      // RCS in dBsm
 
             // Write to CSV
             outFile << theta_deg << "," << phi_deg << "," << sigma << "," << rcs_dBsm << "\n";
@@ -313,17 +218,33 @@ int main(int argc, char** argv) {
             clock_t iter_end = clock();
             double iter_time = double(iter_end - iter_start) / CLOCKS_PER_SEC;
 
-            // Compute average hits
-            float avg_hits = (*h_non_zero_count > 0) ? (float)(*h_sum_hits) / (*h_non_zero_count) : 0.0f;
+            // Compute hit statistics
+            int max_h = 0;
+            int zero_count = 0;
+            long long sum_hits = 0;
+            int non_zero_count = 0;
+
+            for (int n = 0; n < N; n++) {
+                int val = hit_count[n];
+                if (val == 0) {
+                    zero_count++;
+                } else {
+                    if (val > max_h) max_h = val;
+                    sum_hits += val;
+                    non_zero_count++;
+                }
+            }
+
+            float avg_hits = (non_zero_count > 0) ? (float)sum_hits / non_zero_count : 0.0f;
 
             // Print progress
             std::cerr << "[" << std::setw(3) << total_iterations + 1 << "/" << phi_samples * theta_samples << "]"
                 << " | Θ: " << std::setw(3) << (int)theta_deg << "°"
                 << " | Φ: " << std::setw(3) << (int)phi_deg << "°"
                 << " | " << formatTime(iter_time) 
-                << " | Hit %: " << std::setprecision(1) << 100.0f - (100.0f * (*h_zero_count) / N)  << "%" 
+                << " | Hit %: " << std::setprecision(1) << 100.0f - (100.0f * zero_count / N)  << "%" 
                 << " | Avg of bounces: " << std::fixed << std::setprecision(2) << avg_hits
-                << " | Max bounces: " << *h_max_hits << " (" << max_bounces << ")"
+                << " | Max bounces: " << max_h << " (" << max_bounces << ")"
                 << "\n";
                         
             total_iterations++;
@@ -345,29 +266,10 @@ int main(int argc, char** argv) {
     printSeparator("CLEANUP");
     free_world<<<1,1>>>(d_list, d_world);
     cudaDeviceSynchronize();
-    
-    // Free device memory
-    cudaFree(d_hit_pos); 
-    cudaFree(d_hit_normal); 
-    cudaFree(d_hit_dist);
-    cudaFree(d_hit_flag); 
-    cudaFree(d_hit_count);
-    cudaFree(d_accum); 
-    cudaFree(d_list); 
-    cudaFree(d_world);
-    cudaFree(d_max_hits);
-    cudaFree(d_zero_count);
-    cudaFree(d_sum_hits);
-    cudaFree(d_non_zero_count);
-    
-    // Free pinned host memory
-    cudaFreeHost(h_accum);
-    cudaFreeHost(h_max_hits);
-    cudaFreeHost(h_zero_count);
-    cudaFreeHost(h_sum_hits);
-    cudaFreeHost(h_non_zero_count);
-    
-    std::cerr << "│  Device and host memory released. Success.\n";
+    cudaFree(hit_pos); cudaFree(hit_normal); cudaFree(hit_dist);
+    cudaFree(hit_flag); cudaFree(accum); cudaFree(d_list); cudaFree(d_world);
+    cudaFree(hit_count);
+    std::cerr << "│  Device memory released. Success.\n";
     printEndSeparator();
 
     return 0;

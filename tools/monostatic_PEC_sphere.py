@@ -78,7 +78,7 @@ plt.plot(relative_freq_analytical, results_analyt, 'b--', label='Analytical (Mie
 plt.legend(fontsize=12)
 plt.xlabel(r'Relative Frequency $x = 2\pi r / \lambda_0$', fontsize=14)
 plt.ylabel(r'Normalized RCS $\sigma / (\pi r^2)$', fontsize=14)
-plt.title('RCS Comparison: Numerical Simulation vs Analytical Mie Theory', fontsize=16)
+plt.title('RCS Comparison: Numerical Simulation vs Mie Theory', fontsize=16)
 
 plt.yscale('log')
 plt.xscale('log')
@@ -105,4 +105,4 @@ if len(results_norm) == len(relative_freq):
     for i, (rel_f, sim_rcs_norm) in enumerate(zip(relative_freq, results_norm)):
         anal_rcs = normalized_rcs(rel_f)
         rel_error = abs(sim_rcs_norm - anal_rcs) / anal_rcs * 100
-        print(f"x = {rel_f:.2e}: Sim = {sim_rcs_norm:.4f}, Anal = {anal_rcs:.4f}, Error = {rel_error:.2f}%")
+        print(f"x = {rel_f:.2e}: Sim = {sim_rcs_norm:.4f}, Mie = {anal_rcs:.4f}, Error = {rel_error:.2f}%")
