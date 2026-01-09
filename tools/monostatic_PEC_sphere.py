@@ -12,6 +12,9 @@ def normalized_rcs(rel_freq):
     if rel_freq <= 0:
         return 0.0
 
+    if rel_freq >= 20:
+        return 1.0
+
     # determine the maximum number of terms in the series
     N_max = int(np.floor(rel_freq + 4 * rel_freq ** (1 / 3) + 2))
     total_sum = 0.0j

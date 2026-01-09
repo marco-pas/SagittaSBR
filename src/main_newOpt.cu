@@ -1,9 +1,3 @@
-/*
- * Main entry point for monostatic RCS sweep simulation using CUDA ray tracing.
- * Implements the Shooting and Bouncing Rays (SBR) method with Physical Optics integration.
- * Explicit memory management
- */
- 
 #include <iostream>       // Console I/O
 #include <fstream>        // File I/O
 #include <cmath>          // Math
@@ -13,6 +7,8 @@
 #include <cstdlib>        // Standard lib
 #include <sys/stat.h>     // Directory operations
 #include <errno.h>        // Errors
+#include <vector>         // Vector container
+#include <sstream>        // String streams
 
 // CUDA libraries
 #include <cuda_runtime.h> // CUDA runtime API
@@ -97,6 +93,9 @@ int main(int argc, char** argv) {
     std::cerr << "╔════════════════════════════════════════════════════╗\n";
     std::cerr << "║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION   ║\n";
     std::cerr << "╚════════════════════════════════════════════════════╝\n";
+    
+    // GPU info
+    printGPUInfo(); 
 
     // Load configuration
     auto cfg = loadConfig("config.txt");
@@ -115,9 +114,7 @@ int main(int argc, char** argv) {
     int tpby        = cfg.count("tpby")        ? (int)cfg["tpby"]   : 16;
     int max_bounces = cfg.count("max_bounces")    ? (int)cfg["max_bounces"]   : 20;
     float reflection_const = cfg.count("reflection_const")    ? cfg["reflection_const"] : 1.0f;
-
-    bool showInfoGPU = cfg.count("showInfoGPU")    ? cfg["showInfoGPU"] : false;
-    bool showHitStats = cfg.count("showHitStats")    ? cfg["showHitStats"] : false;
+    int stats_interval = cfg.count("stats_interval") ? (int)cfg["stats_interval"] : 10; // Compute stats every N iterations
     
     // Frequency handling: command line > config file > default
     float freq;
@@ -140,30 +137,36 @@ int main(int argc, char** argv) {
     const int N = nx * ny;
     const float distance_offset = 10.0f;
 
-
-    // GPU info
-    if (showInfoGPU) printGPUInfo();
-
     // Print simulation parameters
     printSeparator("SIMULATION PARAMETERS");
     printKV("Frequency", freq / 1e9, "GHz");
     printKV("Wavelength", lambda * 1000, "mm");
     printKV("Wave Number k", k, "rad/m");
-    printKV("Illumination Area", grid_size * grid_size, "m²");              // make sure this is larger than your world objects!!!
+    printKV("Illumination Area", grid_size * grid_size, "m² (make sure this is larger than your world objects)");
     printKV("Grid Size", std::to_string(nx) + "x" + std::to_string(ny));
     printKV("Total Rays", N);
-    printKV("Ray Density", N / (grid_size * grid_size), "rays/m²");         // make sure this is dense enough!!!
+    printKV("Ray Density", N / (grid_size * grid_size), "rays/m² (make sure this is dense enough)");
     printKV("Ray Area", ray_area, "m²");
     printKV("Phi Range", std::to_string(phi_start) + " to " + std::to_string(phi_end));
-    printKV("Theta Range", std::to_string(theta_start) + " to " + std::to_string(theta_end));
+    printKV("Statistics Interval", std::to_string(stats_interval) + " iterations");
     printEndSeparator();
+
+    // Create CUDA streams for overlapping work
+    const int NUM_STREAMS = 2;
+    cudaStream_t streams[NUM_STREAMS];
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        checkCudaErrors(cudaStreamCreate(&streams[i]));
+    }
 
     // Memory allocation - EXPLICIT DEVICE MEMORY (NOT UNIFIED MEMORY)
     printSeparator("MEMORY ALLOCATION");
     vec3 *d_hit_pos, *d_hit_normal; 
     float *d_hit_dist; 
     int *d_hit_flag, *d_hit_count; 
-    cuFloatComplex *d_accum;
+    
+    // Double-buffered accumulators for stream overlap
+    cuFloatComplex *d_accum[NUM_STREAMS];
+    cuFloatComplex *h_accum[NUM_STREAMS];
     
     // Device memory allocations
     checkCudaErrors(cudaMalloc(&d_hit_pos, N * sizeof(vec3)));
@@ -171,13 +174,14 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaMalloc(&d_hit_dist, N * sizeof(float)));
     checkCudaErrors(cudaMalloc(&d_hit_flag, N * sizeof(int)));
     checkCudaErrors(cudaMalloc(&d_hit_count, N * sizeof(int)));
-    checkCudaErrors(cudaMalloc(&d_accum, sizeof(cuFloatComplex)));
 
-    // Pinned host memory for results (faster transfers)
-    cuFloatComplex *h_accum;
-    checkCudaErrors(cudaMallocHost(&h_accum, sizeof(cuFloatComplex)));
+    // Allocate double-buffered accumulators
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        checkCudaErrors(cudaMalloc(&d_accum[i], sizeof(cuFloatComplex)));
+        checkCudaErrors(cudaMallocHost(&h_accum[i], sizeof(cuFloatComplex)));
+    }
 
-    // Device memory for hit statistics
+    // Device memory for hit statistics (single set, computed less frequently)
     int *d_max_hits, *d_zero_count, *d_non_zero_count;
     long long *d_sum_hits;
     checkCudaErrors(cudaMalloc(&d_max_hits, sizeof(int)));
@@ -185,7 +189,7 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaMalloc(&d_sum_hits, sizeof(long long)));
     checkCudaErrors(cudaMalloc(&d_non_zero_count, sizeof(int)));
 
-    // Pinned host memory for statistics (faster transfers)
+    // Pinned host memory for statistics
     int *h_max_hits, *h_zero_count, *h_non_zero_count;
     long long *h_sum_hits;
     checkCudaErrors(cudaMallocHost(&h_max_hits, sizeof(int)));
@@ -200,7 +204,8 @@ int main(int argc, char** argv) {
     create_world<<<1,1>>>(d_list, d_world);
     checkCudaErrors(cudaDeviceSynchronize());
     std::cerr << "│  Device memory and world setup complete.\n";
-    // std::cerr << "│  Using explicit memory management.\n";
+    std::cerr << "│  Using explicit memory management with stream pipelining.\n";
+    std::cerr << "│  Statistics computed every " << stats_interval << " iterations.\n";
     printEndSeparator();
 
     // Create output directory
@@ -241,9 +246,18 @@ int main(int argc, char** argv) {
     int stats_threads = 256;
     int stats_blocks = (N + stats_threads - 1) / stats_threads;
 
+    // Buffer for CSV output to reduce I/O overhead
+    std::vector<std::string> csv_buffer;
+    csv_buffer.reserve(phi_samples * theta_samples);
+
+    // CUDA events for accurate timing
+    cudaEvent_t total_start, total_stop;
+    checkCudaErrors(cudaEventCreate(&total_start));
+    checkCudaErrors(cudaEventCreate(&total_stop));
+
     // Execute monostatic RCS sweep
     printSeparator("EXECUTING SWEEP");
-    clock_t total_sweep_start = clock();
+    checkCudaErrors(cudaEventRecord(total_start));
     int total_iterations = 0;
 
     // Theta loop
@@ -254,6 +268,9 @@ int main(int argc, char** argv) {
         // Phi loop
         for (int p = 0; p < phi_samples; ++p) {
             clock_t iter_start = clock();
+            
+            // Determine which stream to use
+            int s = total_iterations % NUM_STREAMS;
             
             float phi_deg = phi_start + (phi_samples > 1 ? p * (phi_end - phi_start) / (phi_samples - 1) : 0);
             float phi_rad = phi_deg * M_PI / 180.0f;
@@ -268,90 +285,114 @@ int main(int argc, char** argv) {
             vec3 v_vec = unit_vector(cross(dir, u_vec)) * grid_size;
             vec3 llc = (dir * distance_offset) - 0.5f * u_vec - 0.5f * v_vec;
 
-            // Initialize accumulator on device (no need to transfer)
-            checkCudaErrors(cudaMemset(d_accum, 0, sizeof(cuFloatComplex)));
+            // Initialize accumulator on device for this stream
+            checkCudaErrors(cudaMemsetAsync(d_accum[s], 0, sizeof(cuFloatComplex), streams[s]));
 
             // @@ Launch rays (choose single or multi-bounce)
-
             // Single reflection:
-            // launcher_singlebounce<<<blocks, threads>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
+            // launcher<<<blocks, threads, 0, streams[s]>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_flag, nx, ny, llc, u_vec, v_vec, ray_dir, d_world);
             
             // Multiple reflections:
-            launcher<<<blocks, threads>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_count, nx, ny, llc, u_vec, v_vec, ray_dir, d_world, max_bounces);
+            launcher_multibounce<<<blocks, threads, 0, streams[s]>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_count, nx, ny, llc, u_vec, v_vec, ray_dir, d_world, max_bounces);
 
             // @@ Compute PO integral for scattered field
-
             // Single reflection:
-            // integral_PO_singlebounce<<<(N+255)/256, 256>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_flag, N, k, ray_dir, ray_area, d_accum);
+            // integral_PO<<<(N+255)/256, 256, 0, streams[s]>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_flag, N, k, ray_dir, ray_area, d_accum[s]);
             
             // Multiple reflections:
-            integral_PO<<<(N+255)/256, 256>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_count, N, k, ray_dir, ray_area, d_accum, reflection_const);
+            integral_PO_multibounce<<<(N+255)/256, 256, 0, streams[s]>>>(d_hit_pos, d_hit_normal, d_hit_dist, d_hit_count, N, k, ray_dir, ray_area, d_accum[s], reflection_const);
 
-            // Copy accumulator result back to host (async for better overlap)
-            checkCudaErrors(cudaMemcpyAsync(h_accum, d_accum, sizeof(cuFloatComplex), cudaMemcpyDeviceToHost));
+            // Copy accumulator result back to host (async on stream)
+            checkCudaErrors(cudaMemcpyAsync(h_accum[s], d_accum[s], sizeof(cuFloatComplex), cudaMemcpyDeviceToHost, streams[s]));
 
-            // Initialize statistics on device
-            checkCudaErrors(cudaMemset(d_max_hits, 0, sizeof(int)));
-            checkCudaErrors(cudaMemset(d_zero_count, 0, sizeof(int)));
-            checkCudaErrors(cudaMemset(d_sum_hits, 0, sizeof(long long)));
-            checkCudaErrors(cudaMemset(d_non_zero_count, 0, sizeof(int)));
+            // Compute statistics only every N iterations to reduce overhead
+            bool compute_stats = (total_iterations % stats_interval == 0) || 
+                                 (total_iterations == phi_samples * theta_samples - 1); // Always compute on last iteration
+            
+            if (compute_stats) {
+                // Initialize statistics on device
+                checkCudaErrors(cudaMemsetAsync(d_max_hits, 0, sizeof(int), streams[s]));
+                checkCudaErrors(cudaMemsetAsync(d_zero_count, 0, sizeof(int), streams[s]));
+                checkCudaErrors(cudaMemsetAsync(d_sum_hits, 0, sizeof(long long), streams[s]));
+                checkCudaErrors(cudaMemsetAsync(d_non_zero_count, 0, sizeof(int), streams[s]));
 
-            // Compute hit statistics on device
-            if (showHitStats) compute_hit_stats<<<stats_blocks, stats_threads>>>(d_hit_count, N, d_max_hits, d_zero_count, d_sum_hits, d_non_zero_count);
+                // Compute hit statistics on device
+                compute_hit_stats<<<stats_blocks, stats_threads, 0, streams[s]>>>(d_hit_count, N, d_max_hits, d_zero_count, d_sum_hits, d_non_zero_count);
 
-            // Copy statistics back to host (async)
-            checkCudaErrors(cudaMemcpyAsync(h_max_hits, d_max_hits, sizeof(int), cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(h_zero_count, d_zero_count, sizeof(int), cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(h_sum_hits, d_sum_hits, sizeof(long long), cudaMemcpyDeviceToHost));
-            checkCudaErrors(cudaMemcpyAsync(h_non_zero_count, d_non_zero_count, sizeof(int), cudaMemcpyDeviceToHost));
+                // Copy statistics back to host (async on stream)
+                checkCudaErrors(cudaMemcpyAsync(h_max_hits, d_max_hits, sizeof(int), cudaMemcpyDeviceToHost, streams[s]));
+                checkCudaErrors(cudaMemcpyAsync(h_zero_count, d_zero_count, sizeof(int), cudaMemcpyDeviceToHost, streams[s]));
+                checkCudaErrors(cudaMemcpyAsync(h_sum_hits, d_sum_hits, sizeof(long long), cudaMemcpyDeviceToHost, streams[s]));
+                checkCudaErrors(cudaMemcpyAsync(h_non_zero_count, d_non_zero_count, sizeof(int), cudaMemcpyDeviceToHost, streams[s]));
+            }
 
-            // Wait for all operations to complete
-            checkCudaErrors(cudaDeviceSynchronize());
+            // Wait for this stream to complete
+            checkCudaErrors(cudaStreamSynchronize(streams[s]));
 
             // Compute RCS
-            float sigma = 4.0f * M_PI * (h_accum->x * h_accum->x + h_accum->y * h_accum->y);    // RCS in m^2
-            float rcs_dBsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));                              // RCS in dBsm
+            float sigma = 4.0f * M_PI * (h_accum[s]->x * h_accum[s]->x + h_accum[s]->y * h_accum[s]->y);    // RCS in m^2
+            float rcs_dBsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));                                          // RCS in dBsm
 
-            // Write to CSV
-            outFile << theta_deg << "," << phi_deg << "," << sigma << "," << rcs_dBsm << "\n";
+            // Buffer CSV output instead of immediate write
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(6);
+            oss << theta_deg << "," << phi_deg << "," << sigma << "," << rcs_dBsm << "\n";
+            csv_buffer.push_back(oss.str());
             
             clock_t iter_end = clock();
             double iter_time = double(iter_end - iter_start) / CLOCKS_PER_SEC;
 
-            // Compute average hits
-            float avg_hits = (*h_non_zero_count > 0) ? (float)(*h_sum_hits) / (*h_non_zero_count) : 0.0f;
-
-            // Print progress
-            if (showHitStats) {
-            std::cerr << "[" << std::setw(3) << total_iterations + 1 << "/" << phi_samples * theta_samples << "]"
-                << " | Θ: " << std::setw(3) << (int)theta_deg << "°"
-                << " | Φ: " << std::setw(3) << (int)phi_deg << "°"
-                << " | " << formatTime(iter_time) 
-                << " | Hit %: " << std::setprecision(1) << 100.0f - (100.0f * (*h_zero_count) / N)  << "%" 
-                << " | Avg of bounces: " << std::fixed << std::setprecision(2) << avg_hits
-                << " | Max bounces: " << *h_max_hits << " (" << max_bounces << ")"
-                << "\n";
+            // Print progress (with stats if computed)
+            if (compute_stats) {
+                float avg_hits = (*h_non_zero_count > 0) ? (float)(*h_sum_hits) / (*h_non_zero_count) : 0.0f;
+                std::cerr << "[" << std::setw(3) << total_iterations + 1 << "/" << phi_samples * theta_samples << "]"
+                    << " | Θ: " << std::setw(3) << (int)theta_deg << "°"
+                    << " | Φ: " << std::setw(3) << (int)phi_deg << "°"
+                    << " | " << formatTime(iter_time) 
+                    << " | Hit %: " << std::setprecision(1) << 100.0f - (100.0f * (*h_zero_count) / N)  << "%" 
+                    << " | Avg bounces: " << std::fixed << std::setprecision(2) << avg_hits
+                    << " | Max bounces: " << *h_max_hits << " (" << max_bounces << ")"
+                    << "\n";
+            } else {
+                // Simplified output without stats
+                std::cerr << "[" << std::setw(3) << total_iterations + 1 << "/" << phi_samples * theta_samples << "]"
+                    << " | Θ: " << std::setw(3) << (int)theta_deg << "°"
+                    << " | Φ: " << std::setw(3) << (int)phi_deg << "°"
+                    << " | " << formatTime(iter_time) 
+                    << " | RCS: " << std::setprecision(2) << rcs_dBsm << " dBsm"
+                    << "\n";
             }
-            else {
-            std::cerr << "[" << std::setw(3) << total_iterations + 1 << "/" << phi_samples * theta_samples << "]"
-                << " | Θ: " << std::setw(3) << (int)theta_deg << "°"
-                << " | Φ: " << std::setw(3) << (int)phi_deg << "°"
-                << " | " << formatTime(iter_time) << "\n";
-            }    
                         
             total_iterations++;
         }
     }
     
-    clock_t total_sweep_end = clock();
-    double total_time = double(total_sweep_end - total_sweep_start) / CLOCKS_PER_SEC;
+    // Record end time
+    checkCudaErrors(cudaEventRecord(total_stop));
+    checkCudaErrors(cudaEventSynchronize(total_stop));
+    
+    float total_time_ms = 0;
+    checkCudaErrors(cudaEventElapsedTime(&total_time_ms, total_start, total_stop));
+    double total_time = total_time_ms / 1000.0;
+    
+    printEndSeparator();
+
+    // Write all buffered CSV data at once
+    printSeparator("WRITING OUTPUT");
+    std::cerr << "│  Writing " << csv_buffer.size() << " results to " << outputFile << "...\n";
+    for (const auto& line : csv_buffer) {
+        outFile << line;
+    }
+    outFile.close();
+    std::cerr << "│  Output file written successfully.\n";
     printEndSeparator();
 
     // Performance summary
     printSeparator("PERFORMANCE SUMMARY");
     printKV(" Total Sweep Time", formatTime(total_time));
-    printKV(" Total Points", total_iterations);
+    printKV(" Total Points", std::to_string(total_iterations));
     printKV(" Average Time/Point", formatTime(total_time / total_iterations));
+    printKV(" Optimization", std::string("Stream pipelining + reduced stats"));
     printEndSeparator();
 
     // Cleanup
@@ -365,7 +406,6 @@ int main(int argc, char** argv) {
     cudaFree(d_hit_dist);
     cudaFree(d_hit_flag); 
     cudaFree(d_hit_count);
-    cudaFree(d_accum); 
     cudaFree(d_list); 
     cudaFree(d_world);
     cudaFree(d_max_hits);
@@ -373,12 +413,26 @@ int main(int argc, char** argv) {
     cudaFree(d_sum_hits);
     cudaFree(d_non_zero_count);
     
+    // Free double-buffered accumulators
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        cudaFree(d_accum[i]);
+        cudaFreeHost(h_accum[i]);
+    }
+    
     // Free pinned host memory
-    cudaFreeHost(h_accum);
     cudaFreeHost(h_max_hits);
     cudaFreeHost(h_zero_count);
     cudaFreeHost(h_sum_hits);
     cudaFreeHost(h_non_zero_count);
+    
+    // Destroy streams
+    for (int i = 0; i < NUM_STREAMS; i++) {
+        cudaStreamDestroy(streams[i]);
+    }
+    
+    // Destroy events
+    cudaEventDestroy(total_start);
+    cudaEventDestroy(total_stop);
     
     std::cerr << "│  Device and host memory released. Success.\n";
     printEndSeparator();
