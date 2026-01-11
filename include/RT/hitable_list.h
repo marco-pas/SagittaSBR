@@ -11,17 +11,17 @@ This is used to get the intersections with multiple objects
 
 
 // this inherits from the base "hitable" class --> polymorphism
-class hitable_list: public hitable  {  
+class hitableList: public hitable  {  
     public:
-        __device__ hitable_list() {}                                               // default constructor     
-        __device__ hitable_list(hitable **l, int n) {list = l; list_size = n; }    // initialization constructor
+        __device__ hitableList() {}                                               // default constructor     
+        __device__ hitableList(hitable **l, int n) {list = l; listSize = n; }    // initialization constructor
 
         // declaration of a virtual function "hit" for the GPU
         // this creates a virtual fucntion table (vtable)
-        __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
+        __device__ virtual bool hit(const ray& r, float tMin, float tMax, hitRecord& rec) const;
 
         hitable **list;     // this is an array of pointers to hitable objects
-        int list_size;      // @@ how many elements in our scene? in SBR this is going to be 1 or 2, but can keep the generality
+        int listSize;      // @@ how many elements in our scene? in SBR this is going to be 1 or 2, but can keep the generality
 };
 
 
@@ -30,14 +30,14 @@ class hitable_list: public hitable  {
 // @@ in SBR we treat each triangle as an object (maybe)
 // @@ we only care about the closes hit of course
 // @@ after knowing which is the closest hit then you can reflect
-__device__ bool hitable_list::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
-        hit_record temp_rec;
-        bool hit_anything = false;                  // at the start no hit
-        float closest_so_far = t_max;
+__device__ bool hitableList::hit(const ray& r, float tMin, float tMax, hitRecord& rec) const {
+        hitRecord tempRec;
+        bool hitAnything = false;                  // at the start no hit
+        float closestSoFar = tMax;
 
         // loop on all the objects
         // @@ super important for SBR
-        for (int i = 0; i < list_size; i++) {
+        for (int i = 0; i < listSize; i++) {
             
             /*
 
@@ -50,13 +50,13 @@ __device__ bool hitable_list::hit(const ray& r, float t_min, float t_max, hit_re
 
             */
 
-            if (list[i]->hit(r, t_min, closest_so_far, temp_rec)) { 
-                hit_anything = true;                // if we hit something we set this to true
-                closest_so_far = temp_rec.t;        // update closest distance
-                rec = temp_rec;                     // save the info of the hit; @@ for SBR to get currents
+            if (list[i]->hit(r, tMin, closestSoFar, tempRec)) { 
+                hitAnything = true;                // if we hit something we set this to true
+                closestSoFar = tempRec.t;        // update closest distance
+                rec = tempRec;                     // save the info of the hit; @@ for SBR to get currents
             }
         }
-        return hit_anything;
+        return hitAnything;
 }
 
 #endif

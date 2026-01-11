@@ -1,15 +1,5 @@
-#include <iostream>
+#include "app/rtRcsEntry.hpp"
 
-#include "modelLoader.hpp"
-
-
-
-
-int main() {
-
-    std::cout << "Hello, RT-RCS!" << std::endl;
-
-    
-
-    return 0;
+int main(int argc, char** argv) {
+    return runRcsApp(argc, argv);
 }

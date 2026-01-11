@@ -41,8 +41,8 @@ public:
     __host__ __device__ inline vec3& operator/=(const float t);
 
     __host__ __device__ inline float length() const { return sqrt(e[0]*e[0] + e[1]*e[1] + e[2]*e[2]); }
-    __host__ __device__ inline float squared_length() const { return e[0]*e[0] + e[1]*e[1] + e[2]*e[2]; }
-    __host__ __device__ inline void make_unit_vector();
+    __host__ __device__ inline float squaredLength() const { return e[0]*e[0] + e[1]*e[1] + e[2]*e[2]; }
+    __host__ __device__ inline void makeUnitVector();
 
 
     float e[3];
@@ -60,7 +60,7 @@ inline std::ostream& operator<<(std::ostream &os, const vec3 &t) {
     return os;
 }
 
-__host__ __device__ inline void vec3::make_unit_vector() {
+__host__ __device__ inline void vec3::makeUnitVector() {
     float k = 1.0 / sqrt(e[0]*e[0] + e[1]*e[1] + e[2]*e[2]);
     e[0] *= k; e[1] *= k; e[2] *= k;
 }
@@ -148,7 +148,7 @@ __host__ __device__ inline vec3& vec3::operator/=(const float t) {
     return *this;
 }
 
-__host__ __device__ inline vec3 unit_vector(vec3 v) {
+__host__ __device__ inline vec3 unitVector(vec3 v) {
     return v / v.length();
 }
 

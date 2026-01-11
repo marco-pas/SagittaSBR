@@ -7,7 +7,7 @@ class sphere: public hitable  {
     public:
         __device__ sphere() {}
         __device__ sphere(vec3 cen, float r) : center(cen), radius(r)  {};
-        __device__ virtual bool hit(const ray& r, float tmin, float tmax, hit_record& rec) const;
+        __device__ virtual bool hit(const ray& r, float tMin, float tMax, hitRecord& rec) const;
         vec3 center;
         float radius;
 };
@@ -15,7 +15,7 @@ class sphere: public hitable  {
 
 // here the hit for the sphere is implemented
 // different object, different hit
-__device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& rec) const {
+__device__ bool sphere::hit(const ray& r, float tMin, float tMax, hitRecord& rec) const {
     vec3 oc = r.origin() - center;
     float a = dot(r.direction(), r.direction());
     float b = dot(oc, r.direction());
@@ -27,16 +27,16 @@ __device__ bool sphere::hit(const ray& r, float t_min, float t_max, hit_record& 
         // when we have found the closest hit then we must record the info
 
         float temp = (-b - sqrt(discriminant))/a;
-        if (temp < t_max && temp > t_min) {
+        if (temp < tMax && temp > tMin) {
             rec.t = temp;
-            rec.p = r.point_at_parameter(rec.t);
+            rec.p = r.pointAtParameter(rec.t);
             rec.normal = (rec.p - center) / radius; // normal to the sphere
             return true;
         }
         temp = (-b + sqrt(discriminant)) / a;
-        if (temp < t_max && temp > t_min) {
+        if (temp < tMax && temp > tMin) {
             rec.t = temp;
-            rec.p = r.point_at_parameter(rec.t);
+            rec.p = r.pointAtParameter(rec.t);
             rec.normal = (rec.p - center) / radius;
             return true;
         }

@@ -62,9 +62,15 @@ target_link_libraries(projectOptions
 
 add_executable(RT-RCS
     src/RT-RCS.cpp
-    src/modelLoader.cpp
-    src/cuda/rayPool.cu
-    src/cuda/tracing.cu
+    src/app/config.cpp
+    src/app/print.cpp
+    src/app/deviceBuffers.cu
+    src/app/rtRcsEntry.cu
+    src/app/sweep.cu
+    src/cuda/cudaUtils.cu
+    src/cuda/rtKernels.cu
+    src/cuda/poKernels.cu
+    src/scene/world.cu
 )
 
 target_link_libraries(RT-RCS
