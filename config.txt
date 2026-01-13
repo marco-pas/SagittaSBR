@@ -10,8 +10,8 @@ theta_end 90.0          # final theta angle
 theta_samples 1         # number of samples in theta
 freq 10.0e9             # freq of the waves
 grid_size 2.5           # width W and length L for our launcher (it is a square), this has a distance "distance_offset" from the center
-nx 1000                # points in x
-ny 1000                # points in y
+nx 5000                # points in x
+ny 5000                # points in y
 tpbx 16                 # theads per block x
 tpby 16                 # theads per block y
 max_bounces 20          # maximum hits that each ray can have
