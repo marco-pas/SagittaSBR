@@ -29,6 +29,7 @@ __global__ void integratePoMultiBounce(vec3* hitPos, vec3* hitNormal,
                                        float k, vec3 kInc, float rayArea,
                                        cuFloatComplex* accum,
                                        float reflectionConst) {
+
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx >= n || hitCount[idx] == 0) {
@@ -43,7 +44,13 @@ __global__ void integratePoMultiBounce(vec3* hitPos, vec3* hitNormal,
     }
 
     float phase = 2.0f * k * hitDist[idx];
-    float mag = (k * rayArea / (4.0f * M_PI)) * 2.0f * totalReflCoeff;
+    phase = fmodf(phase, 2.0f * M_PI);
+
+    float mag = (k * rayArea / (4.0f * M_PI))
+            * 2.0f
+            * cosTheta
+            * reflectionConst;
+
     cuFloatComplex contrib = make_cuFloatComplex(-mag * sinf(phase), mag * cosf(phase));
 
     atomicAdd(&accum->x, contrib.x);

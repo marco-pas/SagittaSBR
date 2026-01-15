@@ -123,19 +123,30 @@ __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
     hitDist[idx] = 0.0f;
     hitCount[idx] = 0;
 
+    const float EPS = 1e-4f;
+
     for (int k = 0; k < maxBounces; k++) {
         ray r(currentOrigin, currentDir);
         hitRecord rec;
 
         if (hitBvh(triangles, nodes, rootIndex, r, 0.001f, FLT_MAX, rec)) {
+        if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
+
             hitCount[idx]++;
-
-            if (k == 0) {
-                hitPos[idx] = rec.p;
-                hitNormal[idx] = rec.normal;
-            }
-
+            hitPos[idx] = rec.p;
+            hitNormal[idx] = rec.normal;
             hitDist[idx] += rec.t;
+
+            current_dir = unit_vector(
+                currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal
+            );
+
+            currentOrigin = rec.p + rec.normal * EPS;
+
+            // Optional grazing-angle escape
+            // if (fabsf(dot(current_dir, rec.normal)) < 1e-5f)
+            //    break;
+            // }
 
             currentOrigin = rec.p + rec.normal * 0.001f;
             currentDir = currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal;
@@ -144,3 +155,5 @@ __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
         }
     }
 }
+
+

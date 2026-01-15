@@ -1,3 +1,5 @@
+// actual entry point
+
 #include "app/rtRcsEntry.hpp"
 
 #include <fstream>
@@ -48,12 +50,13 @@ bool resolveModelFileType(const std::string& path, modelLoader::FileType& outTyp
 
 int runRcsApp(int argc, char** argv) {
     std::cerr << "╔═══════════════════════════════════════════════════╗\n";
-    std::cerr << "║  MONOSTATIC RCS SWEEP - SHOOTING & BOUNCING RAYS  ║\n";
+    std::cerr << "║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║\n";
     std::cerr << "╚═══════════════════════════════════════════════════╝\n";
 
-    printGpuInfo();
-
     simulationConfig config = loadConfig("config.txt", argc, argv);
+
+    if (config.showInfoGPU) printGpuInfo();
+
     int rayCount = config.nx * config.ny;
 
     if (config.modelPath.empty()) {
