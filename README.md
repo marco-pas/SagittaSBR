@@ -42,6 +42,10 @@ Use the built binary name (for example, `RT-RCS` from CMake or `SBR` from the Ma
 
 Supported extensions: `.obj`, `.gltf`, `.glb`. `--model` is required for simulations.
 
+### BVH Builder Options (Code-Level)
+
+BVH build parameters live in `bvhBuildOptions` (see `include/scene/bvhBuilder.hpp`) and are wired in `src/app/rtRcsEntry.cu`. You can switch between the simple splitter and the SAH splitter by changing `buildOptions.algorithm` in code.
+
 ## Visualization
 
 ```bash

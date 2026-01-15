@@ -120,7 +120,9 @@ int runRcsApp(int argc, char** argv) {
         triangles.push_back(tri);
     }
 
-    bvhBuildResult bvh = buildBvh(std::move(triangles));
+    bvhBuildOptions buildOptions;
+    // Switch buildOptions.algorithm to bvhBuildAlgorithm::Simple for the median splitter.
+    bvhBuildResult bvh = buildBvh(std::move(triangles), buildOptions);
 
     printSeparator("MEMORY ALLOCATION");
     deviceBuffers buffers;

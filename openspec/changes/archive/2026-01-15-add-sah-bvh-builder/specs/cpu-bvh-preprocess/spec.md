@@ -1,8 +1,4 @@
-# cpu-bvh-preprocess Specification
-
-## Purpose
-TBD - created by archiving change move-bvh-preprocess-cpu. Update Purpose after archive.
-## Requirements
+## MODIFIED Requirements
 ### Requirement: CPU BVH construction
 The system SHALL build a BVH for the loaded triangle mesh on the CPU using a binned SAH splitter before launching any GPU kernels.
 
@@ -17,13 +13,7 @@ The system SHALL upload BVH nodes and triangle data as contiguous buffers optimi
 - **WHEN** preprocessing completes
 - **THEN** BVH node and triangle buffers are copied to GPU memory without device-side dynamic allocation
 
-### Requirement: Model path required
-The system SHALL require a model path for simulation and SHALL not fall back to a default sphere.
-
-#### Scenario: Missing model path
-- **WHEN** the user omits `--model`
-- **THEN** the application reports an error and exits without running the sweep
-
+## ADDED Requirements
 ### Requirement: Parallel BVH construction
 The system SHALL support parallel BVH construction on the CPU when available.
 
@@ -48,4 +38,3 @@ The system SHALL allow selecting between a simple splitter and the SAH splitter 
 #### Scenario: SAH splitter selected
 - **WHEN** the build option selects the SAH splitter
 - **THEN** BVH construction uses the binned SAH algorithm
-

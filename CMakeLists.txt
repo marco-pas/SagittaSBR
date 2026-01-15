@@ -19,6 +19,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(CUDAToolkit REQUIRED)
+find_package(OpenMP)
 
 option(enableWarningsAsErrors "Treat compiler warnings as errors" OFF)
 
@@ -59,6 +60,13 @@ target_link_libraries(projectOptions
         CUDA::cublas
         CUDA::curand
 )
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(projectOptions
+        INTERFACE
+            OpenMP::OpenMP_CXX
+    )
+endif()
 
 add_executable(RT-RCS
     src/RT-RCS.cpp
