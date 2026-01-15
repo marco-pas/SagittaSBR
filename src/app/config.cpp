@@ -67,11 +67,11 @@ simulationConfig loadConfig(const std::string& filename, int argc, char** argv) 
     if (raw.count("n_y")) {
         config.ny = static_cast<int>(raw["n_y"]);
     }
-    if (raw.count("tbp_x")) {
-        config.tbpx = static_cast<int>(raw["tpb_x"]);
+    if (raw.count("tpb_x")) {
+        config.tpbx = static_cast<int>(raw["tpb_x"]);
     }
     if (raw.count("tpb_y")) {
-        config.tbpy = static_cast<int>(raw["tpb_y"]);
+        config.tpby = static_cast<int>(raw["tpb_y"]);
     }
     if (raw.count("max_bounces")) {
         config.maxBounces = static_cast<int>(raw["max_bounces"]);
@@ -114,11 +114,13 @@ simulationConfig loadConfig(const std::string& filename, int argc, char** argv) 
             }
             continue;
         }
+
     if (raw.count("show_info_GPU")) {
-        config.showInfoGPU = static_cast<bool>raw["show_info_GPU"];
+        config.showInfoGPU = static_cast<bool>(raw["show_info_GPU"]);
+
     }
     if (raw.count("show_hit_stats")) {
-        config.showHitStats = static_cast<bool>raw["show_hit_stats"];
+        config.showHitStats = static_cast<bool>(raw["show_hit_stats"]);
     }
 
         std::cerr << "Warning: Unrecognized argument '" << arg << "'.\n";

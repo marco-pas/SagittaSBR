@@ -13,11 +13,16 @@ struct simulationConfig {
     float gridSize = 3.0f;
     int nx = 400;
     int ny = 400;
+    int tpbx = 16;
+    int tpby = 16;
     int maxBounces = 20;
     float reflectionConst = 1.0f;
     float freq = 10.0e9f;
+    bool showInfoGPU = false;
+    bool showHitStats = false;
     std::string modelPath;
     float modelScale = 1.0f;
+
 };
 
 simulationConfig loadConfig(const std::string& filename, int argc, char** argv);
