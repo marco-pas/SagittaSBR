@@ -1,4 +1,4 @@
-![My Logo](./SBR.svg)
+![My Logo](./assets/SBR.svg)
 
 # SBR Project for RCS Calculations
 
