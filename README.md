@@ -31,6 +31,17 @@ Modify `config.txt` to set up the simulation options.
 
 Optional arguments: `./SBR 1.0e9` to directly specify the frequency without modifying `config.txt`.
 
+### Model Loading (CLI)
+
+Use the built binary name (for example, `RT-RCS` from CMake or `SBR` from the Makefile).
+
+```bash
+./RT-RCS --model path/to/model.obj
+./RT-RCS --model path/to/model.glb --model-scale 0.1
+```
+
+Supported extensions: `.obj`, `.gltf`, `.glb`. If `--model` is omitted, the default sphere scene is used.
+
 ## Visualization
 
 ```bash
@@ -47,4 +58,3 @@ To perform frequency sweeps, you can use or adapt the provided shell script:
 ```bash
 ./run_freq_scan.sh
 ```
-

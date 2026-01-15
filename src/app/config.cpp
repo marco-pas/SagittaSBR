@@ -5,6 +5,7 @@
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <string>
 
 namespace {
 std::map<std::string, float> readConfigFile(const std::string& filename) {
@@ -72,12 +73,48 @@ simulationConfig loadConfig(const std::string& filename, int argc, char** argv) 
     if (raw.count("reflection_const")) {
         config.reflectionConst = raw["reflection_const"];
     }
-
-    if (argc > 1) {
-        config.freq = std::atof(argv[1]);
-        std::cout << "Using frequency from command line: " << config.freq << " Hz\n";
-    } else if (raw.count("freq")) {
+    bool freqFromConfig = false;
+    if (raw.count("freq")) {
         config.freq = raw["freq"];
+        freqFromConfig = true;
+    }
+
+    bool freqFromCli = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+
+        if (arg == "--model") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --model requires a file path.\n";
+                std::exit(1);
+            }
+            config.modelPath = argv[++i];
+            continue;
+        }
+
+        if (arg == "--model-scale") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --model-scale requires a numeric value.\n";
+                std::exit(1);
+            }
+            config.modelScale = std::atof(argv[++i]);
+            continue;
+        }
+
+        if (!arg.empty() && arg[0] != '-') {
+            if (!freqFromCli) {
+                config.freq = std::atof(arg.c_str());
+                freqFromCli = true;
+            }
+            continue;
+        }
+
+        std::cerr << "Warning: Unrecognized argument '" << arg << "'.\n";
+    }
+
+    if (freqFromCli) {
+        std::cout << "Using frequency from command line: " << config.freq << " Hz\n";
+    } else if (freqFromConfig) {
         std::cout << "Using frequency from config file: " << config.freq << " Hz\n";
     } else {
         std::cout << "Using default frequency: " << config.freq << " Hz\n";

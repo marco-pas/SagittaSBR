@@ -70,6 +70,7 @@ add_executable(RT-RCS
     src/cuda/cudaUtils.cu
     src/cuda/rtKernels.cu
     src/cuda/poKernels.cu
+    src/modelLoader.cpp
     src/scene/world.cu
 )
 

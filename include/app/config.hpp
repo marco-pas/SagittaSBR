@@ -16,6 +16,8 @@ struct simulationConfig {
     int maxBounces = 20;
     float reflectionConst = 1.0f;
     float freq = 10.0e9f;
+    std::string modelPath;
+    float modelScale = 1.0f;
 };
 
 simulationConfig loadConfig(const std::string& filename, int argc, char** argv);
