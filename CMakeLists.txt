@@ -71,7 +71,7 @@ add_executable(RT-RCS
     src/cuda/rtKernels.cu
     src/cuda/poKernels.cu
     src/modelLoader.cpp
-    src/scene/world.cu
+    src/scene/bvhBuilder.cpp
 )
 
 target_link_libraries(RT-RCS

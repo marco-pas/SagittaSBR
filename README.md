@@ -26,10 +26,10 @@ Modify `config.txt` to set up the simulation options.
 
 
 ```bash
-./SBR
+./SBR --model path/to/model.obj
 ```
 
-Optional arguments: `./SBR 1.0e9` to directly specify the frequency without modifying `config.txt`.
+Optional arguments: `./SBR 1.0e9` to directly specify the frequency without modifying `config.txt` (frequency may appear anywhere in the argument list).
 
 ### Model Loading (CLI)
 
@@ -40,7 +40,7 @@ Use the built binary name (for example, `RT-RCS` from CMake or `SBR` from the Ma
 ./RT-RCS --model path/to/model.glb --model-scale 0.1
 ```
 
-Supported extensions: `.obj`, `.gltf`, `.glb`. If `--model` is omitted, the default sphere scene is used.
+Supported extensions: `.obj`, `.gltf`, `.glb`. `--model` is required for simulations.
 
 ## Visualization
 

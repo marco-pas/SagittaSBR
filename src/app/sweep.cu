@@ -12,7 +12,7 @@
 #include "cuda/rtKernels.cuh"
 
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
-                      hitable** deviceWorld, std::ostream& outFile) {
+                      const bvhGpuData& bvhData, std::ostream& outFile) {
     const float c0 = 299792458.0f;
     const float lambda = c0 / config.freq;
     const float k = 2.0f * M_PI / lambda;
@@ -71,7 +71,9 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
             launchRaysMultiBounce<<<blocks, threads>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
-                config.nx, config.ny, llc, uVec, vVec, rayDir, deviceWorld, config.maxBounces);
+                config.nx, config.ny, llc, uVec, vVec, rayDir,
+                bvhData.triangles, bvhData.nodes, bvhData.rootIndex,
+                config.maxBounces);
             checkCudaErrors(cudaDeviceSynchronize());
 
             integratePoMultiBounce<<<(nRays + 255) / 256, 256>>>(

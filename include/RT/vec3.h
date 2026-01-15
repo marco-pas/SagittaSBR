@@ -5,6 +5,11 @@
 #include <stdlib.h>
 #include <iostream>
 
+#ifndef __CUDACC__
+#define __host__
+#define __device__
+#endif
+
 class vec3  {
 
 

@@ -1,41 +1,110 @@
 #include "cuda/rtKernels.cuh"
 
 #include <cfloat>
+#include <cmath>
 
+#include "RT/hitable.h"
 #include "RT/ray.h"
 
-__global__ void launchRays(vec3* hitPos, vec3* hitNormal, float* hitDist,
-                           int* hitFlag, int nx, int ny, vec3 llc, vec3 horiz,
-                           vec3 vert, vec3 rayDir, hitable** world) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
+namespace {
+__device__ bool hitTriangle(const Triangle& tri, const ray& r, float tMin, float tMax,
+                            hitRecord& rec) {
+    const float eps = 1.0e-6f;
+    vec3 edge1 = tri.v1 - tri.v0;
+    vec3 edge2 = tri.v2 - tri.v0;
+    vec3 pvec = cross(r.direction(), edge2);
+    float det = dot(edge1, pvec);
 
-    if (i >= nx || j >= ny) {
-        return;
+    if (fabsf(det) < eps) {
+        return false;
     }
-    int idx = j * nx + i;
 
-    float u = (i + 0.5f) / float(nx);
-    float v = (j + 0.5f) / float(ny);
-
-    vec3 rayStart = llc + u * horiz + v * vert;
-    ray r(rayStart, rayDir);
-
-    hitRecord rec;
-    if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
-        hitFlag[idx] = 1;
-        hitPos[idx] = rec.p;
-        hitNormal[idx] = rec.normal;
-        hitDist[idx] = rec.t;
-    } else {
-        hitFlag[idx] = 0;
+    float invDet = 1.0f / det;
+    vec3 tvec = r.origin() - tri.v0;
+    float u = dot(tvec, pvec) * invDet;
+    if (u < 0.0f || u > 1.0f) {
+        return false;
     }
+
+    vec3 qvec = cross(tvec, edge1);
+    float v = dot(r.direction(), qvec) * invDet;
+    if (v < 0.0f || u + v > 1.0f) {
+        return false;
+    }
+
+    float t = dot(edge2, qvec) * invDet;
+    if (t < tMin || t > tMax) {
+        return false;
+    }
+
+    rec.t = t;
+    rec.p = r.pointAtParameter(t);
+    rec.normal = unitVector(cross(edge1, edge2));
+    return true;
+}
+
+__device__ bool hitAabb(const BvhNode& node, const ray& r, float tMin, float tMax) {
+    vec3 invDir(1.0f / r.direction().x(),
+                1.0f / r.direction().y(),
+                1.0f / r.direction().z());
+
+    vec3 t0 = (node.boundsMin - r.origin()) * invDir;
+    vec3 t1 = (node.boundsMax - r.origin()) * invDir;
+
+    float tmin = fmaxf(fmaxf(fminf(t0.x(), t1.x()), fminf(t0.y(), t1.y())), fminf(t0.z(), t1.z()));
+    float tmax = fminf(fminf(fmaxf(t0.x(), t1.x()), fmaxf(t0.y(), t1.y())), fmaxf(t0.z(), t1.z()));
+
+    tmin = fmaxf(tmin, tMin);
+    tmax = fminf(tmax, tMax);
+
+    return tmax >= tmin;
+}
+
+__device__ bool hitBvh(const Triangle* triangles, const BvhNode* nodes, int rootIndex,
+                       const ray& r, float tMin, float tMax, hitRecord& rec) {
+    constexpr int stackSize = 64;
+    int stack[stackSize];
+    int stackPtr = 0;
+    stack[stackPtr++] = rootIndex;
+
+    bool hitAnything = false;
+    float closest = tMax;
+    hitRecord tempRec;
+
+    while (stackPtr > 0) {
+        int nodeIndex = stack[--stackPtr];
+        const BvhNode& node = nodes[nodeIndex];
+
+        if (!hitAabb(node, r, tMin, closest)) {
+            continue;
+        }
+
+        if (node.triCount > 0) {
+            for (int i = 0; i < node.triCount; ++i) {
+                int triIndex = node.firstTri + i;
+                if (hitTriangle(triangles[triIndex], r, tMin, closest, tempRec)) {
+                    hitAnything = true;
+                    closest = tempRec.t;
+                    rec = tempRec;
+                }
+            }
+        } else {
+            if (stackPtr + 2 <= stackSize) {
+                stack[stackPtr++] = node.left;
+                stack[stackPtr++] = node.right;
+            }
+        }
+    }
+
+    return hitAnything;
+}
 }
 
 __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
                                       float* hitDist, int* hitCount, int nx,
                                       int ny, vec3 llc, vec3 horiz, vec3 vert,
-                                      vec3 rayDir, hitable** world,
+                                      vec3 rayDir, const Triangle* triangles,
+                                      const BvhNode* nodes, int rootIndex,
                                       int maxBounces) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
@@ -58,7 +127,7 @@ __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
         ray r(currentOrigin, currentDir);
         hitRecord rec;
 
-        if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
+        if (hitBvh(triangles, nodes, rootIndex, r, 0.001f, FLT_MAX, rec)) {
             hitCount[idx]++;
 
             if (k == 0) {
@@ -68,7 +137,7 @@ __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
 
             hitDist[idx] += rec.t;
 
-            currentOrigin = rec.p;
+            currentOrigin = rec.p + rec.normal * 0.001f;
             currentDir = currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal;
         } else {
             break;

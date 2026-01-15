@@ -5,7 +5,7 @@
 
 #include "app/config.hpp"
 #include "app/deviceBuffers.hpp"
-#include "RT/hitable.h"
+#include "scene/bvh.h"
 
 struct sweepResults {
     int totalIterations = 0;
@@ -13,6 +13,6 @@ struct sweepResults {
 };
 
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
-                      hitable** deviceWorld, std::ostream& outFile);
+                      const bvhGpuData& bvhData, std::ostream& outFile);
 
 #endif
