@@ -100,18 +100,77 @@ __device__ bool hitBvh(const Triangle* triangles, const BvhNode* nodes, int root
 }
 }
 
+// __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
+//                                       float* hitDist, int* hitCount, int nx,
+//                                       int ny, vec3 llc, vec3 horiz, vec3 vert,
+//                                       vec3 rayDir, const Triangle* triangles,
+//                                       const BvhNode* nodes, int rootIndex,
+//                                       int maxBounces) {
+
+//     int i = blockIdx.x * blockDim.x + threadIdx.x;
+//     int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+//     if (i >= nx || j >= ny) {
+//         return;
+//     }
+//     int idx = j * nx + i;
+
+//     float u = (i + 0.5f) / float(nx);
+//     float v = (j + 0.5f) / float(ny);
+
+//     vec3 currentOrigin = llc + u * horiz + v * vert;
+//     vec3 currentDir = rayDir;
+
+//     hitDist[idx] = 0.0f;
+//     hitCount[idx] = 0;
+
+//     const float EPS = 1e-4f;
+
+//     for (int k = 0; k < maxBounces; k++) {
+//         ray r(currentOrigin, currentDir);
+//         hitRecord rec;
+
+//         if (hitBvh(triangles, nodes, rootIndex, r, 0.001f, FLT_MAX, rec)) {
+//         if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
+
+//             hitCount[idx]++;
+//             hitPos[idx] = rec.p;
+//             hitNormal[idx] = rec.normal;
+//             hitDist[idx] += rec.t;
+
+//             current_dir = unit_vector(
+//                 currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal
+//             );
+
+//             currentOrigin = rec.p + rec.normal * EPS;
+
+//             // Optional grazing-angle escape
+//             // if (fabsf(dot(current_dir, rec.normal)) < 1e-5f)
+//             //    break;
+//             // }
+
+//             currentOrigin = rec.p + rec.normal * 0.001f;
+//             currentDir = currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal;
+//         } else {
+//             break;
+//         }
+//     }
+// }
+
+
+
 __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
                                       float* hitDist, int* hitCount, int nx,
                                       int ny, vec3 llc, vec3 horiz, vec3 vert,
                                       vec3 rayDir, const Triangle* triangles,
                                       const BvhNode* nodes, int rootIndex,
                                       int maxBounces) {
+
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if (i >= nx || j >= ny) {
-        return;
-    }
+    if (i >= nx || j >= ny) return;
+    
     int idx = j * nx + i;
 
     float u = (i + 0.5f) / float(nx);
@@ -129,31 +188,30 @@ __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
         ray r(currentOrigin, currentDir);
         hitRecord rec;
 
-        if (hitBvh(triangles, nodes, rootIndex, r, 0.001f, FLT_MAX, rec)) {
-        if ((*world)->hit(r, 0.001f, FLT_MAX, rec)) {
-
+        // Use the BVH traversal function provided in your arguments
+        if (hitBvh(triangles, nodes, rootIndex, r, 0.001f, 1e20f, rec)) {
+            
+            // Record the first hit for PO integration if k == 0
+            // or update based on your specific SBR requirements
+            if (k == 0) {
+                hitPos[idx] = rec.p;
+                hitNormal[idx] = rec.normal;
+            }
+            
             hitCount[idx]++;
-            hitPos[idx] = rec.p;
-            hitNormal[idx] = rec.normal;
             hitDist[idx] += rec.t;
 
-            current_dir = unit_vector(
+            // Reflect the ray: R = I - 2 * dot(I, N) * N
+            currentDir = unitVector(
                 currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal
             );
 
+            // Offset the new origin along the normal to prevent self-intersection
             currentOrigin = rec.p + rec.normal * EPS;
-
-            // Optional grazing-angle escape
-            // if (fabsf(dot(current_dir, rec.normal)) < 1e-5f)
-            //    break;
-            // }
-
-            currentOrigin = rec.p + rec.normal * 0.001f;
-            currentDir = currentDir - 2.0f * dot(currentDir, rec.normal) * rec.normal;
+            
         } else {
+            // Ray escaped into the void
             break;
         }
     }
 }
-
-

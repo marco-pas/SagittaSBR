@@ -7,16 +7,16 @@ phi_samples 90          # number of samples in phi
 theta_start 90.0        # starting theta angle
 theta_end 90.0          # final theta angle
 theta_samples 1         # number of samples in theta
-freq 10.0e9             # freq of the waves
-grid_size 2.5           # width W and length L for our launcher (it is a square), this has a distance "distance_offset" from the center
-n_x 5000                # points in x
-n_y 5000                # points in y
+freq 5.978282e9             # freq of the waves
+grid_size 100         # width W and length L for our launcher (it is a square), this has a distance "distance_offset" from the center
+n_x 25000                # points in x
+n_y 25000                # points in y
 tpb_x 16                 # theads per block x
 tpb_y 16                 # theads per block y
-max_bounces 20          # maximum hits that each ray can have
+max_bounces 50          # maximum hits that each ray can have
 reflection_const 1.0    # PEC
 
 ## Optional Prints
 
-show_info_GPU false       # print info for the GPU (true/false)
-show_hit_stats false      # print stats for the hit tracking at every angle (true/false)
+show_info_GPU true       # print info for the GPU (true/false)
+show_hit_stats true      # print stats for the hit tracking at every angle (true/false)

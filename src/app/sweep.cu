@@ -14,60 +14,8 @@
 #include "cuda/rtKernels.cuh"
 
 
-// Kernel to compute hit statistics on device
-__global__ void compute_hit_stats(int *hit_count, int N, int *max_hits, int *zero_count, long long *sum_hits, int *non_zero_count) {
-    // Use shared memory for reduction
-    __shared__ int s_max[256];
-    __shared__ int s_zero[256];
-    __shared__ long long s_sum[256];
-    __shared__ int s_nonzero[256];
-    
-    int tid = threadIdx.x;
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // Initialize shared memory
-    s_max[tid] = 0;
-    s_zero[tid] = 0;
-    s_sum[tid] = 0;
-    s_nonzero[tid] = 0;
-    
-    // Process elements
-    if (idx < N) {
-        int val = hit_count[idx];
-        if (val == 0) {
-            s_zero[tid] = 1;
-        } else {
-            s_max[tid] = val;
-            s_sum[tid] = val;
-            s_nonzero[tid] = 1;
-        }
-    }
-    __syncthreads();
-    
-    // Reduction in shared memory
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-        if (tid < s) {
-            s_max[tid] = max(s_max[tid], s_max[tid + s]);
-            s_zero[tid] += s_zero[tid + s];
-            s_sum[tid] += s_sum[tid + s];
-            s_nonzero[tid] += s_nonzero[tid + s];
-        }
-        __syncthreads();
-    }
-    
-    // Write block results to global memory
-    if (tid == 0) {
-        atomicMax(max_hits, s_max[0]);
-        atomicAdd(zero_count, s_zero[0]);
-        atomicAdd((unsigned long long*)sum_hits, (unsigned long long)s_sum[0]);
-        atomicAdd(non_zero_count, s_nonzero[0]);
-    }
-}
-
-
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                       const bvhGpuData& bvhData, std::ostream& outFile) {
-                      hitable** deviceWorld, std::ostream& outFile) {
 
     // physical params
     const float c0 = 299792458.0f;
@@ -157,58 +105,47 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             clock_t iterEnd = clock();
             double iterTime = double(iterEnd - iterStart) / CLOCKS_PER_SEC;
 
-
-            // stats can be computed with the GPU
-            // write this part better
-
             if (config.showHitStats) {
+                // can be done with a kernel, but minor
+                int maxHits = 0;
+                int zeroCount = 0;
+                long long sumHits = 0;
+                int nonZeroCount = 0;
 
-            int maxHits = 0;
-            int zeroCount = 0;
-            long long sumHits = 0;
-            int nonZeroCount = 0;
-
-            for (int n = 0; n < nRays; n++) {
-                int val = buffers.hitCount[n];
-                if (val == 0) {
-                    zeroCount++;
-                } else {
-                    if (val > maxHits) {
-                        maxHits = val;
+                for (int n = 0; n < nRays; n++) {
+                    int val = buffers.hitCount[n];
+                    if (val == 0) {
+                        zeroCount++;
+                    } else {
+                        if (val > maxHits) maxHits = val;
+                        sumHits += val;
+                        nonZeroCount++;
                     }
-                    sumHits += val;
-                    nonZeroCount++;
                 }
-            }
 
-            float avgHits = (nonZeroCount > 0) ? static_cast<float>(sumHits) / nonZeroCount : 0.0f;
+                float avgHits = (nonZeroCount > 0) ? static_cast<float>(sumHits) / nonZeroCount : 0.0f;
 
-            // Print progress
-            
-            std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
-                << config.phiSamples * config.thetaSamples << "]"
-                << " | Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
-                << " | Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                << " | " << formatTime(iterTime)
-                << " | Hit %: " << std::setprecision(1)
-                << 100.0f - (100.0f * zeroCount / nRays) << "%"
-                << " | Avg of bounces: " << std::fixed << std::setprecision(2) << avgHits
-                << " | Max bounces: " << maxHits << " (" << config.maxBounces << ")"
-                << "\n";
-            }
-            else {
-            std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
-                << config.phiSamples * config.thetaSamples << "]"
-                << " | Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
-                << " | Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                << " | " << formatTime(iterTime) << "\n";
+                std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
+                    << config.phiSamples * config.thetaSamples << "]"
+                    << " | Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
+                    << " | Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
+                    << " | " << formatTime(iterTime)
+                    << " | Hit %: " << std::setprecision(1)
+                    << 100.0f - (100.0f * zeroCount / nRays) << "%"
+                    << " | Avg of bounces: " << std::fixed << std::setprecision(2) << avgHits
+                    << " | Max bounces: " << maxHits << " (" << config.maxBounces << ")"
+                    << "\n";
+            } else {
+                std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
+                    << config.phiSamples * config.thetaSamples << "]"
+                    << " | Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
+                    << " | Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
+                    << " | " << formatTime(iterTime) << "\n";
             }    
 
-            }
-
             totalIterations++;
-        }
-    }
+        } // End of Phi loop
+    } // End of Theta loop
 
     clock_t totalSweepEnd = clock();
     double totalTime = double(totalSweepEnd - totalSweepStart) / CLOCKS_PER_SEC;
