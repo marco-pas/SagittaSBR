@@ -12,21 +12,26 @@ Before compiling, make sure you have a compatible GPU and adapt the Makefile bas
 
 ### Compilation
 
+Make sure to have all the necessary modules to compile
+
 ```bash
-make clean
-make
+mkdir build
+cd build
+cmake ..
+make -j
 ```
 
 ## Configuration
 
-Modify `config.txt` to set up the simulation options.
-
+Modify `config.txt` to set the simulation options.
+You can use `#` to comment out lines.
+If an option is missing, the code will fall back to hard-coded default values
+defined in `src/main`. 
 
 ## Execution
 
-
 ```bash
-./SBR --model path/to/model.obj
+./RT-RCS --model path/to/model.obj
 ```
 
 Optional arguments: `./SBR 1.0e9` to directly specify the frequency without modifying `config.txt` (frequency may appear anywhere in the argument list).
@@ -48,17 +53,44 @@ BVH build parameters live in `bvhBuildOptions` (see `include/scene/bvhBuilder.hp
 
 ## Visualization
 
+To plot the RCS as a function of the azimuthal angle $\varphi$,
+use the provided Python script.
+Make sure all required Python packages are installed;
+using a Python virtual environment is recommended.
+
 ```bash
-python3 plotRCS.py
+python3 tools/plotRCS.py
 ```
 
-Optional arguments: `python3 plotRCS.py m2` to display the radar cross section in $m^2$ instead of dBsm.
+### Optional arguments
 
+Plot Radar Cross Section (RCS) results from output/rcs_results.csv.
+
+Command-line options:
+
+  `--unit`   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
+  
+  `--plot`   : Enable or disable plot saving/display (True/False), default True
+  
+  `--scans`  : Enable saving averaged RCS data for parameter scans, default False
+
+Examples:
+
+  `python3 tools/plotRCS.py`
+  
+  `python3 tools/plotRCS.py --unit=m2`
+  
+  `python3 tools/plotRCS.py --plot=False --scans=True --unit=m2`
+
+---
 
 ## Frequency Scans
 
-To perform frequency sweeps, you can use or adapt the provided shell script:
+To perform frequency sweeps, you can use or adapt the provided shell script.
+This script runs simulations at multiple frequencies, saves the data for each run,
+and then produces a final Python plot together with analytical results obtained
+from Mie scattering for a PEC sphere.
 
 ```bash
-./run_freq_scan.sh
+./tools/run_freq_scan.sh
 ```
