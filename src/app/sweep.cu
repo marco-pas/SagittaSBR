@@ -23,7 +23,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     const float k = 2.0f * M_PI / lambda;
     const float rayArea = (config.gridSize * config.gridSize) / (config.nx * config.ny);
     const int nRays = config.nx * config.ny;
-    const float distanceOffset = 10.0f;
+    const float distanceOffset = 10.0f * config.gridSize;  // = 10.0f; // this has to be fixed!
 
     // simulation params
     printSeparator("SIMULATION PARAMETERS");
@@ -39,6 +39,8 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     printKv("Ray Area", rayArea, "m²");
     printKv("Phi Range", std::to_string(config.phiStart) + " to " + std::to_string(config.phiEnd));
     printKv("Theta Range", std::to_string(config.thetaStart) + " to " + std::to_string(config.thetaEnd));
+    printKv("Show GPU info", std::to_string(config.showInfoGPU));
+    printKv("Show Hit info", std::to_string(config.showHitStats));
     printEndSeparator();
 
     dim3 threads(config.tpbx, config.tpby);

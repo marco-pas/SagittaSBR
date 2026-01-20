@@ -79,6 +79,15 @@ simulationConfig loadConfig(const std::string& filename, int argc, char** argv) 
     if (raw.count("reflection_const")) {
         config.reflectionConst = raw["reflection_const"];
     }
+
+    if (raw.count("show_info_GPU")) {
+        config.showInfoGPU = static_cast<bool>(raw["show_info_GPU"]);
+
+    }
+    if (raw.count("show_hit_stats")) {
+        config.showHitStats = static_cast<bool>(raw["show_hit_stats"]);
+    }
+
     bool freqFromConfig = false;
     if (raw.count("freq")) {
         config.freq = raw["freq"];
@@ -114,14 +123,6 @@ simulationConfig loadConfig(const std::string& filename, int argc, char** argv) 
             }
             continue;
         }
-
-    if (raw.count("show_info_GPU")) {
-        config.showInfoGPU = static_cast<bool>(raw["show_info_GPU"]);
-
-    }
-    if (raw.count("show_hit_stats")) {
-        config.showHitStats = static_cast<bool>(raw["show_hit_stats"]);
-    }
 
         std::cerr << "Warning: Unrecognized argument '" << arg << "'.\n";
     }

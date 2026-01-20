@@ -19,6 +19,9 @@ def normalized_rcs(rel_freq):
     if rel_freq <= 0:
         return 0.0
 
+    if rel_freq >= 1e3:
+        return 1.0
+
     # determine the maximum number of terms in the series
     N_max = int(np.floor(rel_freq + 4 * rel_freq ** (1 / 3) + 2))
     total_sum = 0.0j
@@ -97,7 +100,7 @@ plt.grid(True, which='both', alpha=0.3)
 #          transform=plt.gca().transAxes, fontsize=12,
 #          verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-folder = "./benchmark_sphere"
+folder = "./"
 os.makedirs(folder, exist_ok=True)
 
 plt.savefig(os.path.join(folder, "rcs_comparison.png"),

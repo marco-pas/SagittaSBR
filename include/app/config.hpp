@@ -18,8 +18,8 @@ struct simulationConfig {
     int maxBounces = 20;
     float reflectionConst = 1.0f;
     float freq = 10.0e9f;
-    bool showInfoGPU = false;
-    bool showHitStats = false;
+    bool showInfoGPU = true;
+    bool showHitStats = true;
     std::string modelPath;
     float modelScale = 1.0f;
 

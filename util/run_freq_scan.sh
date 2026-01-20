@@ -3,7 +3,9 @@
 # Parameters
 F_START=5e7
 F_END=7.5e11
-N=5
+N=20
+
+touch ./rcs_results.csv
 
 # Check for NumPy
 python3 - <<'EOF'
@@ -23,7 +25,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-rm -f ./assets/results_freq_scans.csv
+rm -f ./results_freq_scans.csv
 
 for i in $(seq 0 $((N-1))); do
     freq=$(python3 - <<EOF
@@ -46,8 +48,8 @@ EOF
     echo "Frequency: $freq Hz"
     echo 
 
-    ./bin/SagittaSBR "$freq"
-    python3 tools/plotRCS.py --unit=m2 --plot=False --scans=True
+    ./build/RT-RCS "$freq" --model assets/test_models/sphere8.obj
+    python3 util/plotRCS.py --unit=m2 --plot=False --scans=True
 done
 
 
@@ -55,4 +57,4 @@ echo
 echo "Now plotting results!"
 echo
 
-python3 tools/monostatic_PEC_sphere.py
+python3 util/monostatic_PEC_sphere.py
