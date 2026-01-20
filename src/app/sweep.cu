@@ -43,6 +43,26 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     printKv("Show Hit info", std::to_string(config.showHitStats));
     printEndSeparator();
 
+    // Make sure physics is well represented
+    float raySpacing = std::sqrt(rayArea);
+    float samplingRatio = raySpacing / lambda;  // Should be < 0.1 ideally
+
+    if (samplingRatio > 0.2f) {  // or 0.1f for stricter
+        printSeparator("WARNING");
+        std::cerr << "│ Physics is under-resolved at your frequency!\n";
+        printKv("Ray spacing / λ", samplingRatio, " (< 0.1 needed)");
+        printKv("Undersampled by", samplingRatio / 0.1f, "times");
+        
+        float illuminationArea = config.gridSize * config.gridSize;
+        
+        std::cerr << "│\n│ Solutions: \n";
+        printKv("  a. Increase n_x, n_y by factor", std::sqrt(samplingRatio / 0.1f));
+        printKv("  b. Reduce frequency below", (config.freq * 0.1f / samplingRatio) / 1e9, "GHz");
+        std::cerr << "│   c. Reduce illumination area (if possible)\n";
+        printEndSeparator();
+    }
+
+
     dim3 threads(config.tpbx, config.tpby);
     dim3 blocks(
         (config.nx + config.tpbx - 1) / config.tpbx, 
@@ -67,11 +87,22 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                 : 0);
             float phiRad = phiDeg * M_PI / 180.0f;
 
+            // angle flipping
+
             vec3 dir(
                 sinf(thetaRad) * cosf(phiRad), 
                 sinf(thetaRad) * sinf(phiRad), 
                 cosf(thetaRad)
             );
+
+            // vec3 dir(
+            //     sinf(thetaRad) * cosf(phiRad), 
+            //     cosf(thetaRad),                 // Y is now up
+            //     sinf(thetaRad) * sinf(phiRad)
+            // );
+
+
+
             vec3 rayDir = -dir; // invert as ray travels towards the center
 
             vec3 up(0, 1, 0);
@@ -129,20 +160,20 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
                 std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
                     << config.phiSamples * config.thetaSamples << "]"
-                    << " | Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
-                    << " | Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                    << " | " << formatTime(iterTime)
-                    << " | Hit %: " << std::setprecision(1)
+                    << " │ Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
+                    << " │ Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
+                    << " │ " << formatTime(iterTime)
+                    << " │ Hit %: " << std::setprecision(1)
                     << 100.0f - (100.0f * zeroCount / nRays) << "%"
-                    << " | Avg of bounces: " << std::fixed << std::setprecision(2) << avgHits
-                    << " | Max bounces: " << maxHits << " (" << config.maxBounces << ")"
+                    << " │ Avg of bounces: " << std::fixed << std::setprecision(2) << avgHits
+                    << " │ Max bounces: " << maxHits << " (" << config.maxBounces << ")"
                     << "\n";
             } else {
                 std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
                     << config.phiSamples * config.thetaSamples << "]"
-                    << " | Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
-                    << " | Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                    << " | " << formatTime(iterTime) << "\n";
+                    << " │ Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
+                    << " │ Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
+                    << " │ " << formatTime(iterTime) << "\n";
             }    
 
             totalIterations++;

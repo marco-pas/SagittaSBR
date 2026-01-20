@@ -1,19 +1,23 @@
 ## Configuration for SagittaSBR ##
 ## Simulation Values
 
-phi_start 0.0           # starting phi angle
-phi_end 180.0           # final phi angle
+# Make sure that your frequency is large enough to have lambda << system size
+# Make sure that your launcher size ("grid_size") is large enough to fully represent your object. For a sphere of radius 1, you can set "grid_size = 2.5".
+# Make sure that your ray-density is large enough to fully represent yout wavelength. Make sure that lambda > 5 * sqrt(rayArea). Code throws a warning if this is not true.
+
+phi_start 0           # starting phi angle
+phi_end 180          # final phi angle
 phi_samples 30          # number of samples in phi
-theta_start 90.0        # starting theta angle
-theta_end 90.0          # final theta angle
-theta_samples 1         # number of samples in theta
-freq 6.0e9             # freq of the waves
-grid_size 2.5         # width W and length L for our launcher (it is a square), this has a distance "distance_offset" from the center
-n_x 20000                # points in x
-n_y 20000                # points in y
+theta_start 0        # starting theta angle
+theta_end 360         # final theta angle
+theta_samples 30         # number of samples in theta
+freq 1e11             # freq of the waves
+grid_size 60         # width W and length L for our launcher (it is a square), this has a distance "distance_offset = 10.0f * grid_size" from the center
+n_x 18000               # points in x
+n_y 18000               # points in y
 tpb_x 16                 # theads per block x
 tpb_y 16                 # theads per block y
-max_bounces 30          # maximum hits that each ray can have
+max_bounces 100          # maximum hits that each ray can have
 reflection_const 1.0    # PEC
 show_info_GPU 0       # print info for the GPU (true 1 / false 0)
 show_hit_stats 0      # print stats for the hit tracking at every angle (true 1 / false 0)
