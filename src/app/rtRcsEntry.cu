@@ -19,6 +19,8 @@
 #include "scene/bvhBuilder.hpp"
 #include "sim/sweep.hpp"
 
+#include <nvtx3/nvToolsExt.h>
+
 namespace {
 std::string toLowerCopy(const std::string& value) {
     std::string lower = value;
@@ -63,6 +65,8 @@ int runRcsApp(int argc, char** argv) {
         std::cerr << "Error: --model is required for simulation runs.\n";
         return 1;
     }
+
+    nvtxRangePushA("Read Mesh");
 
     modelLoader::MeshData mesh;
     std::string modelError;
@@ -123,9 +127,14 @@ int runRcsApp(int argc, char** argv) {
         triangles.push_back(tri);
     }
 
+    nvtxRangePop();
+
     bvhBuildOptions buildOptions;
     // Switch buildOptions.algorithm to bvhBuildAlgorithm::Simple for the median splitter.
+
+    nvtxRangePushA("build BVH");
     bvhBuildResult bvh = buildBvh(std::move(triangles), buildOptions);
+    nvtxRangePop();
 
     printSeparator("MEMORY ALLOCATION");
     deviceBuffers buffers;
@@ -147,6 +156,8 @@ int runRcsApp(int argc, char** argv) {
                                cudaMemcpyHostToDevice));
     std::cerr << "│  BVH buffers and world setup complete.\n";
     printEndSeparator();
+
+
 
     std::ofstream outFile("rcs_results.csv");
     outFile << "# Frequency: " << config.freq << "\n# Grid: " << config.nx << "x" << config.ny << "\n";

@@ -2,8 +2,8 @@
 
 # Parameters
 F_START=5e7
-F_END=7.5e11
-N=20
+F_END=1e12
+N=250
 
 touch ./rcs_results.csv
 

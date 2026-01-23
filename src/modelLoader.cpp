@@ -15,6 +15,9 @@
 #include <algorithm>
 #include <cctype>
 
+
+
+
 namespace modelLoader {
 
 static std::string toLower(const std::string& s) {

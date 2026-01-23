@@ -13,10 +13,14 @@
 #include "cuda/poKernels.cuh"
 #include "cuda/rtKernels.cuh"
 
+#include <nvtx3/nvToolsExt.h>
+
 
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                       const bvhGpuData& bvhData, std::ostream& outFile) {
 
+    nvtxRangePushA("runSweep");
+    
     // physical params
     const float c0 = 299792458.0f;
     const float lambda = c0 / config.freq;
@@ -189,6 +193,10 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     printKv(" Total Points", totalIterations);
     printKv(" Average Time/Point", formatTime(totalTime / totalIterations));
     printEndSeparator();
+
+    
+
+    nvtxRangePop();
 
     return sweepResults{totalIterations, totalTime};
 }

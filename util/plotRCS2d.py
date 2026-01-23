@@ -1,5 +1,5 @@
 """
-Plot Radar Cross Section (RCS) results from output/rcs_results.csv.
+Plot 2D Radar Cross Section (RCS) results from output/rcs_results.csv.
 
 Command-line options:
   --unit   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
@@ -7,21 +7,30 @@ Command-line options:
   --scans  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
-  python3 util/plotRCS.py
-  python3 util/plotRCS.py --unit=m2
-  python3 util/plotRCS.py --plot=False --scans=True --unit=m2
+  python3 util/plotRCS_2D.py
+  python3 util/plotRCS_2D.py --unit=m2
+  python3 util/plotRCS_2D.py --plot=False --scans=True --unit=m2
 """
 
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import argparse
 import csv
 
 
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman", "Times", "Nimbus Roman No9 L", "STIXGeneral", "DejaVu Serif"],   
+    "mathtext.fontset": "stix",
+    "pdf.fonttype": 42,
+    "ps.fonttype": 42,
+    "axes.unicode_minus": False,
+})
+
 
 # Argument parsing
-
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -33,7 +42,7 @@ def str2bool(v):
     raise argparse.ArgumentTypeError('Boolean value expected (True/False).')
 
 
-parser = argparse.ArgumentParser(description="Plot RCS in dBsm or m^2")
+parser = argparse.ArgumentParser(description="Plot 2D RCS in dBsm or m^2")
 
 parser.add_argument(
     '--unit',
@@ -99,63 +108,64 @@ frequency = float(freq_str)
 # Load data
 
 df = pd.read_csv(file_csv, comment='#')
-df = df.sort_values(by='phi')
 
-# Plot setup
-fig, ax = plt.subplots(figsize=(14, 7))
-plt.subplots_adjust(right=0.8)
+# Check if theta column exists
+if 'theta' not in df.columns:
+    print("Warning: 'theta' column not found in CSV. Using default theta=90 for all points.")
+    df['theta'] = 90.0
 
-# Plotting logic
+# Get unique values
+phi_vals = np.sort(df['phi'].unique())
+theta_vals = np.sort(df['theta'].unique())
 
+# Create meshgrid
+phi_grid, theta_grid = np.meshgrid(phi_vals, theta_vals)
+
+# Select data field
 if plot_dbsm:
-    plot_field = df['rcs_dbsm']
+    data_field = 'rcs_dbsm'
     label_str = 'RCS (dBsm)'
     unit_str = 'dBsm'
+    cmap = 'plasma'
 else:
-    plot_field = df['rcs_m2']
+    data_field = 'rcs_m2'
     label_str = 'RCS ($m^2$)'
     unit_str = '$m^2$'
+    cmap = 'hot'
 
-    avg_rcs = plot_field.mean()
-    std_rcs = plot_field.std()
+# Clip numeric RCS values to avoid extreme color scaling in the plot
+vmin, vmax = -20, 63
+df['rcs_clipped'] = df[data_field].clip(lower=vmin, upper=vmax)
 
-    ax.axhline(
-        y=avg_rcs,
-        color='red',
-        linestyle='--',
-        linewidth=1.5,
-        label=f'Average: {avg_rcs:.4f} {unit_str}'
-    )
+# Pivot data for 2D plotting
+rcs_grid = df.pivot_table(values=data_field, index='theta', columns='phi', aggfunc='mean')
+rcs_array = rcs_grid.values
 
+# Calculate average RCS
+avg_rcs = df[data_field].mean()
 
-ax.plot(
-    df['phi'],
-    plot_field,
-    color='#1f77b4',
-    linewidth=2,
-    label=f'Monostatic {label_str}'
-)
+# Plot setup
+fig, ax = plt.subplots(figsize=(11, 5))
+
+# Create contour plot
+im = ax.pcolormesh(phi_grid, theta_grid, rcs_array, shading='auto', cmap=cmap)
+# im.set_clim(vmin=-10, vmax=45)
+
+# Add colorbar
+cbar = plt.colorbar(im, ax=ax)
+cbar.set_label(label_str, fontsize=12)
+# cbar.set_clim([-10, 45])
 
 # Styling
+# ax.set_title('2D Monostatic Radar Cross Section', fontsize=16)
+ax.set_xlabel(r'Angle $\phi$ (deg)', fontsize=14)
+ax.set_ylabel(r'Angle $\theta$ (deg)', fontsize=14)
+ax.grid(True, linestyle='--', alpha=0.3, color='white')
 
-ax.set_title('Monostatic Radar Cross Section', fontsize=16)
-ax.set_xlabel('Phi (Degrees)', fontsize=12)
-ax.set_ylabel(label_str, fontsize=12)
-ax.grid(True, linestyle='--', alpha=0.6)
-ax.legend(loc='upper left')
+plt.xticks(np.arange(0, 360, 15))
+plt.yticks(np.arange(0, 180, 15))
 
-# Metadata box
-info_text = "Simulation Parameters:\n" + "\n".join(metadata)
-props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-ax.text(
-    1.05,
-    0.95,
-    info_text,
-    transform=ax.transAxes,
-    fontsize=10,
-    verticalalignment='top',
-    bbox=props
-)
+plt.tight_layout()
 
 # Save / show plot
 
@@ -163,16 +173,16 @@ if save_plots:
     if not os.path.exists("figures"):
         os.makedirs("figures")
 
-    output_path = get_next_filename("figures", "rcs_plot", "png")
+    output_path = get_next_filename("figures", "rcs_2d_plot", "pdf")
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    print(f"----- Plot saved to {output_path} -----")
+    print(f"--------- Plot saved to {output_path} ---------")
 else:
     plt.close()
 
 # Scan data output
 
 if not plot_dbsm:
-    print(f"Computed Average RCS: {avg_rcs:.4f} +- {std_rcs:.4f} m^2")
+    print(f"Computed Average RCS: {avg_rcs:.4f} m^2")
     print()
 
     if save_data_scans:
@@ -180,8 +190,8 @@ if not plot_dbsm:
         with open(filename_scan, "a", newline='') as f:
             writer = csv.writer(f)
             if f.tell() == 0:
-                writer.writerow(["Frequency", "Avg_RCS", "Std_RCS"])
-            writer.writerow([frequency, avg_rcs, std_rcs])
+                writer.writerow(["Frequency", "Avg_RCS"])
+            writer.writerow([frequency, avg_rcs])
 
 if save_plots:
     plt.show()
