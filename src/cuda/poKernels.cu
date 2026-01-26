@@ -2,6 +2,10 @@
 
 #include <cmath>
 
+#if defined(USE_HIP)
+#define cuCmulf hipCmulf
+#endif
+
 __global__ void integratePo(vec3* hitPos, vec3* hitNormal, float* hitDist,
                             int* hitFlag, int n, float k, vec3 kInc,
                             float rayArea, cuFloatComplex* accum) {

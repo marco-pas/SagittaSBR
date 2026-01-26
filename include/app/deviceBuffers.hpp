@@ -1,7 +1,12 @@
 #ifndef APP_DEVICE_BUFFERS_HPP
 #define APP_DEVICE_BUFFERS_HPP
 
+#if defined(USE_HIP)
+#include <hip/hip_complex.h>
+#define cuFloatComplex hipFloatComplex
+#else
 #include <cuComplex.h>
+#endif
 
 #include "RT/vec3.h"
 

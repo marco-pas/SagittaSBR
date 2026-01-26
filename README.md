@@ -8,17 +8,36 @@ This code takes inspiration from the [Accelerated Ray Tracing in One Weekend in 
 
 ## Running a Simulation
 
-Before compiling, make sure you have a compatible GPU and adapt the Makefile based on your GPU architecture.
+Before compiling, make sure you have a compatible GPU (NVIDIA or AMD).
 
 ### Compilation
 
-Make sure to have all the necessary modules to compile
+#### NVIDIA GPUs (CUDA)
+
+Make sure you have the CUDA Toolkit installed.
 
 ```bash
 mkdir build
 cd build
 cmake ..
 make -j
+```
+
+#### AMD GPUs (HIP/ROCm)
+
+Make sure you have ROCm installed with HIP, hipBLAS, and hipRAND.
+
+```bash
+mkdir build
+cd build
+cmake -DUSE_HIP=ON ..
+make -j
+```
+
+You can also specify a target architecture:
+
+```bash
+cmake -DUSE_HIP=ON -DCMAKE_HIP_ARCHITECTURES="gfx90a" ..
 ```
 
 ## Configuration

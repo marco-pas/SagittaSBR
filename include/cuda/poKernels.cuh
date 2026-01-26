@@ -1,7 +1,12 @@
 #ifndef CUDA_PO_KERNELS_CUH
 #define CUDA_PO_KERNELS_CUH
 
+#if defined(USE_HIP)
+#include <hip/hip_runtime.h>
+#include <hip/hip_complex.h>
+#else
 #include <cuComplex.h>
+#endif
 
 #include "RT/vec3.h"
 

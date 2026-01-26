@@ -10,11 +10,14 @@
 
 #include "app/print.hpp"
 #include "cuda/cudaUtils.cuh"
+#include "cuda/gpuConfig.cuh"
 #include "cuda/poKernels.cuh"
 #include "cuda/rtKernels.cuh"
 
+#if defined(USE_HIP)
+#else
 #include <nvtx3/nvToolsExt.h>
-
+#endif
 
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                       const bvhGpuData& bvhData, std::ostream& outFile) {
@@ -128,7 +131,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                 config.maxBounces);
             checkCudaErrors(cudaDeviceSynchronize());
 
-            integratePoMultiBounce<<<(nRays + 255) / 256, 256>>>(
+            integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_BLOCK_SIZE_1D), GPU_BLOCK_SIZE_1D>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
                 nRays, k, rayDir, rayArea, buffers.accum, config.reflectionConst);
             checkCudaErrors(cudaDeviceSynchronize());

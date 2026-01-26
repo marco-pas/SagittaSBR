@@ -8,8 +8,13 @@
 #include <string>
 #include <iomanip>
 
+#if defined(USE_HIP)
+#include <hip/hip_runtime.h>
+#include <hip/hip_complex.h>
+#else
 #include <cuda_runtime.h>
 #include <cuComplex.h>
+#endif
 
 #include "vec3.h"
 #include "ray.h"

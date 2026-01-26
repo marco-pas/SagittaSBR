@@ -19,7 +19,10 @@
 #include "scene/bvhBuilder.hpp"
 #include "sim/sweep.hpp"
 
+#if defined(USE_HIP)
+#else
 #include <nvtx3/nvToolsExt.h>
+#endif
 
 namespace {
 std::string toLowerCopy(const std::string& value) {

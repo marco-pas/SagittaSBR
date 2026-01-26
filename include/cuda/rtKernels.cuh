@@ -1,7 +1,11 @@
 #ifndef CUDA_RT_KERNELS_CUH
 #define CUDA_RT_KERNELS_CUH
 
+#if defined(USE_HIP)
+#include <hip/hip_runtime.h>
+#else
 #include <cuda_runtime.h>
+#endif
 
 #include "RT/vec3.h"
 #include "scene/bvh.h"
