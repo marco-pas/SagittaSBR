@@ -15,6 +15,7 @@
 #include "cuda/rtKernels.cuh"
 
 #if defined(USE_HIP)
+#include <hip/hip_runtime.h>
 #else
 #include <nvtx3/nvToolsExt.h>
 #endif
@@ -62,8 +63,6 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         printKv("Ray spacing / λ", samplingRatio, " (< 0.1 needed)");
         printKv("Undersampled by", samplingRatio / 0.1f, "times");
         
-        float illuminationArea = config.gridSize * config.gridSize;
-        
         std::cerr << "│\n│ Solutions: \n";
         printKv("  a. Increase n_x, n_y by factor", std::sqrt(samplingRatio / 0.1f));
         printKv("  b. Reduce frequency below", (config.freq * 0.1f / samplingRatio) / 1e9, "GHz");
@@ -78,6 +77,29 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         (config.ny + config.tpby - 1) / config.tpby  // BUG FIX: was missing -1
     );
 
+    // ========== Create GPU events for detailed timing ==========
+    cudaEvent_t rtKernelStart, rtKernelStop;
+    cudaEvent_t poKernelStart, poKernelStop;
+    cudaEvent_t memsetStart, memsetStop;
+    cudaEvent_t memcpyStart, memcpyStop;
+    
+    checkCudaErrors(cudaEventCreate(&rtKernelStart));
+    checkCudaErrors(cudaEventCreate(&rtKernelStop));
+    checkCudaErrors(cudaEventCreate(&poKernelStart));
+    checkCudaErrors(cudaEventCreate(&poKernelStop));
+    checkCudaErrors(cudaEventCreate(&memsetStart));
+    checkCudaErrors(cudaEventCreate(&memsetStop));
+    checkCudaErrors(cudaEventCreate(&memcpyStart));
+    checkCudaErrors(cudaEventCreate(&memcpyStop));
+
+    // Accumulators for timing statistics
+    double totalRtKernelMs = 0.0;
+    double totalPoKernelMs = 0.0;
+    double totalMemsetMs = 0.0;
+    double totalMemcpyMs = 0.0;
+    double totalFileWriteMs = 0.0;
+    double totalStatsMs = 0.0;
+
     printSeparator("EXECUTING SWEEP");
     clock_t totalSweepStart = clock();
     int totalIterations = 0;
@@ -89,28 +111,16 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         float thetaRad = thetaDeg * M_PI / 180.0f;
 
         for (int p = 0; p < config.phiSamples; ++p) {
-            clock_t iterStart = clock();
-
             float phiDeg = config.phiStart + (config.phiSamples > 1
                 ? p * (config.phiEnd - config.phiStart) / (config.phiSamples - 1)
                 : 0);
             float phiRad = phiDeg * M_PI / 180.0f;
-
-            // angle flipping
 
             vec3 dir(
                 sinf(thetaRad) * cosf(phiRad), 
                 sinf(thetaRad) * sinf(phiRad), 
                 cosf(thetaRad)
             );
-
-            // vec3 dir(
-            //     sinf(thetaRad) * cosf(phiRad), 
-            //     cosf(thetaRad),                 // Y is now up
-            //     sinf(thetaRad) * sinf(phiRad)
-            // );
-
-
 
             vec3 rayDir = -dir; // invert as ray travels towards the center
 
@@ -123,36 +133,63 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             vec3 vVec = unitVector(cross(dir, uVec)) * config.gridSize;
             vec3 llc = (dir * distanceOffset) - 0.5f * uVec - 0.5f * vVec;
 
-            // Reset accumulator on device using memset (fast, asynchronous)
+            // ========== TIMING: Memset ==========
+            checkCudaErrors(cudaEventRecord(memsetStart));
             checkCudaErrors(cudaMemset(buffers.accum, 0, sizeof(cuFloatComplex)));
+            checkCudaErrors(cudaEventRecord(memsetStop));
 
+            // ========== TIMING: Ray tracing kernel ==========
+            checkCudaErrors(cudaEventRecord(rtKernelStart));
             launchRaysMultiBounce<<<blocks, threads>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
                 config.nx, config.ny, llc, uVec, vVec, rayDir,
                 bvhData.triangles, bvhData.nodes, bvhData.rootIndex,
                 config.maxBounces);
-            checkCudaErrors(cudaDeviceSynchronize());
+            checkCudaErrors(cudaEventRecord(rtKernelStop));
 
+            // ========== TIMING: PO integration kernel ==========
+            checkCudaErrors(cudaEventRecord(poKernelStart));
             integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_BLOCK_SIZE_1D), GPU_BLOCK_SIZE_1D>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
                 nRays, k, rayDir, rayArea, buffers.accum, config.reflectionConst);
-            checkCudaErrors(cudaDeviceSynchronize());
+            checkCudaErrors(cudaEventRecord(poKernelStop));
 
-            // Copy accumulator result from device to host
+            // ========== TIMING: Device to host memcpy ==========
+            checkCudaErrors(cudaEventRecord(memcpyStart));
             checkCudaErrors(cudaMemcpy(buffers.accumHost, buffers.accum, 
                                        sizeof(cuFloatComplex), cudaMemcpyDeviceToHost));
+            checkCudaErrors(cudaEventRecord(memcpyStop));
+            checkCudaErrors(cudaEventSynchronize(memcpyStop));
+
+            // Get timing results
+            float rtKernelMs = 0.0f, poKernelMs = 0.0f, memsetMs = 0.0f, memcpyMs = 0.0f;
+            checkCudaErrors(cudaEventElapsedTime(&memsetMs, memsetStart, memsetStop));
+            checkCudaErrors(cudaEventElapsedTime(&rtKernelMs, rtKernelStart, rtKernelStop));
+            checkCudaErrors(cudaEventElapsedTime(&poKernelMs, poKernelStart, poKernelStop));
+            checkCudaErrors(cudaEventElapsedTime(&memcpyMs, memcpyStart, memcpyStop));
+
+            totalMemsetMs += memsetMs;
+            totalRtKernelMs += rtKernelMs;
+            totalPoKernelMs += poKernelMs;
+            totalMemcpyMs += memcpyMs;
 
             float sigma = 4.0f * M_PI * (buffers.accumHost->x * buffers.accumHost->x
                          + buffers.accumHost->y * buffers.accumHost->y);
             float rcsDbsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));
 
+            // ========== TIMING: File write ==========
+            clock_t fileWriteStart = clock();
             outFile << thetaDeg << "," << phiDeg << "," << sigma << "," << rcsDbsm << "\n";
+            clock_t fileWriteEnd = clock();
+            double fileWriteMs = double(fileWriteEnd - fileWriteStart) / CLOCKS_PER_SEC * 1000.0;
+            totalFileWriteMs += fileWriteMs;
 
-            clock_t iterEnd = clock();
-            double iterTime = double(iterEnd - iterStart) / CLOCKS_PER_SEC;
+            float totalIterMs = memsetMs + rtKernelMs + poKernelMs + memcpyMs + fileWriteMs;
 
             if (config.showHitStats) {
-                // Copy hitCount from device to host for statistics
+                // ========== TIMING: Stats computation ==========
+                clock_t statsStart = clock();
+                
                 checkCudaErrors(cudaMemcpy(buffers.hitCountHost, buffers.hitCount,
                                            nRays * sizeof(int), cudaMemcpyDeviceToHost));
                 
@@ -172,41 +209,76 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                     }
                 }
 
+                clock_t statsEnd = clock();
+                double statsMs = double(statsEnd - statsStart) / CLOCKS_PER_SEC * 1000.0;
+                totalStatsMs += statsMs;
+
                 float avgHits = (nonZeroCount > 0) ? static_cast<float>(sumHits) / nonZeroCount : 0.0f;
 
                 std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
                     << config.phiSamples * config.thetaSamples << "]"
                     << " │ Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
                     << " │ Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                    << " │ " << formatTime(iterTime)
-                    << " │ Hit %: " << std::setprecision(1)
-                    << 100.0f - (100.0f * zeroCount / nRays) << "%"
-                    << " │ Avg of bounces: " << std::fixed << std::setprecision(2) << avgHits
-                    << " │ Max bounces: " << maxHits << " (" << config.maxBounces << ")"
+                    << " │ RT: " << std::fixed << std::setprecision(2) << rtKernelMs << "ms"
+                    << " │ PO: " << poKernelMs << "ms"
+                    << " │ Tot: " << totalIterMs << "ms"
+                    << " │ Hit: " << std::setprecision(0) << 100.0f - (100.0f * zeroCount / nRays) << "%"
+                    << " │ Bounces: " << std::setprecision(2) << avgHits
                     << "\n";
             } else {
                 std::cerr << "[" << std::setw(3) << totalIterations + 1 << "/"
                     << config.phiSamples * config.thetaSamples << "]"
                     << " │ Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
                     << " │ Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                    << " │ " << formatTime(iterTime) << "\n";
+                    << " │ RT: " << std::fixed << std::setprecision(2) << rtKernelMs << "ms"
+                    << " │ PO: " << poKernelMs << "ms"
+                    << " │ Total: " << totalIterMs << "ms"
+                    << "\n";
             }    
 
             totalIterations++;
         } // End of Phi loop
     } // End of Theta loop
 
+    // Cleanup GPU events
+    checkCudaErrors(cudaEventDestroy(rtKernelStart));
+    checkCudaErrors(cudaEventDestroy(rtKernelStop));
+    checkCudaErrors(cudaEventDestroy(poKernelStart));
+    checkCudaErrors(cudaEventDestroy(poKernelStop));
+    checkCudaErrors(cudaEventDestroy(memsetStart));
+    checkCudaErrors(cudaEventDestroy(memsetStop));
+    checkCudaErrors(cudaEventDestroy(memcpyStart));
+    checkCudaErrors(cudaEventDestroy(memcpyStop));
+
     clock_t totalSweepEnd = clock();
     double totalTime = double(totalSweepEnd - totalSweepStart) / CLOCKS_PER_SEC;
     printEndSeparator();
 
-    printSeparator("PERFORMANCE SUMMARY");
-    printKv(" Total Sweep Time", formatTime(totalTime));
-    printKv(" Total Points", totalIterations);
-    printKv(" Average Time/Point", formatTime(totalTime / totalIterations));
+    // ========== Print detailed performance summary ==========
+    printSeparator("SWEEP PERFORMANCE BREAKDOWN");
+    printKv("Ray Tracing Kernel (total)", totalRtKernelMs, "ms");
+    printKv("PO Integration Kernel (total)", totalPoKernelMs, "ms");
+    printKv("Memset (total)", totalMemsetMs, "ms");
+    printKv("Memcpy D2H (total)", totalMemcpyMs, "ms");
+    printKv("File Writes (total)", totalFileWriteMs, "ms");
+    if (config.showHitStats) {
+        printKv("Stats Computation (total)", totalStatsMs, "ms");
+    }
+    printKv("─────────────────", "");
+    printKv("GPU Time (kernels only)", totalRtKernelMs + totalPoKernelMs, "ms");
+    printKv("Total Sweep Wall Time", totalTime * 1000.0, "ms");
     printEndSeparator();
 
-    
+    printSeparator("PER-ITERATION AVERAGES");
+    printKv("Ray Tracing Kernel", totalRtKernelMs / totalIterations, "ms");
+    printKv("PO Integration Kernel", totalPoKernelMs / totalIterations, "ms");
+    printKv("Memset", totalMemsetMs / totalIterations, "ms");
+    printKv("Memcpy D2H", totalMemcpyMs / totalIterations, "ms");
+    printKv("File Write", totalFileWriteMs / totalIterations, "ms");
+    printKv("─────────────────", "");
+    printKv("Total Points", totalIterations);
+    printKv("Average Time/Point", totalTime * 1000.0 / totalIterations, "ms");
+    printEndSeparator();
 
 #ifndef USE_HIP
     nvtxRangePop();

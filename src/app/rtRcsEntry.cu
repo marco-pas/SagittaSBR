@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <ctime>
 
 #include "app/config.hpp"
 #include "app/deviceBuffers.hpp"
@@ -20,6 +21,7 @@
 #include "sim/sweep.hpp"
 
 #if defined(USE_HIP)
+#include <hip/hip_runtime.h>
 #else
 #include <nvtx3/nvToolsExt.h>
 #endif
@@ -58,6 +60,9 @@ int runRcsApp(int argc, char** argv) {
     std::cerr << "║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║\n";
     std::cerr << "╚═══════════════════════════════════════════════════╝\n";
 
+    // ========== TIMING: Total application ==========
+    clock_t appStartTime = clock();
+
     simulationConfig config = loadConfig("config.txt", argc, argv);
 
     if (config.showInfoGPU) printGpuInfo();
@@ -72,6 +77,9 @@ int runRcsApp(int argc, char** argv) {
 #ifndef USE_HIP
     nvtxRangePushA("Read Mesh");
 #endif
+
+    // ========== TIMING: Model loading ==========
+    clock_t modelLoadStart = clock();
 
     modelLoader::MeshData mesh;
     std::string modelError;
@@ -132,9 +140,15 @@ int runRcsApp(int argc, char** argv) {
         triangles.push_back(tri);
     }
 
+    clock_t modelLoadEnd = clock();
+    double modelLoadTime = double(modelLoadEnd - modelLoadStart) / CLOCKS_PER_SEC;
+
 #ifndef USE_HIP
     nvtxRangePop();
 #endif
+
+    // ========== TIMING: BVH construction ==========
+    clock_t bvhBuildStart = clock();
 
     bvhBuildOptions buildOptions;
     // Switch buildOptions.algorithm to bvhBuildAlgorithm::Simple for the median splitter.
@@ -146,6 +160,12 @@ int runRcsApp(int argc, char** argv) {
 #ifndef USE_HIP
     nvtxRangePop();
 #endif
+
+    clock_t bvhBuildEnd = clock();
+    double bvhBuildTime = double(bvhBuildEnd - bvhBuildStart) / CLOCKS_PER_SEC;
+
+    // ========== TIMING: Memory allocation ==========
+    clock_t memAllocStart = clock();
 
     printSeparator("MEMORY ALLOCATION");
     deviceBuffers buffers;
@@ -165,23 +185,71 @@ int runRcsApp(int argc, char** argv) {
     checkCudaErrors(cudaMemcpy(bvhData.nodes, bvh.nodes.data(),
                                bvhData.nodeCount * sizeof(BvhNode),
                                cudaMemcpyHostToDevice));
+    
+    checkCudaErrors(cudaDeviceSynchronize());
+    
+    clock_t memAllocEnd = clock();
+    double memAllocTime = double(memAllocEnd - memAllocStart) / CLOCKS_PER_SEC;
+
     std::cerr << "│  BVH buffers and world setup complete.\n";
     printEndSeparator();
 
+    // ========== Print initialization timing ==========
+    printSeparator("INITIALIZATION TIMING");
+    printKv("Model Loading", modelLoadTime * 1000.0, "ms");
+    printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
+    printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
+    printKv("Total Init Time", (modelLoadTime + bvhBuildTime + memAllocTime) * 1000.0, "ms");
+    printKv("Triangle Count", static_cast<int>(triangleCount));
+    printKv("BVH Node Count", bvhData.nodeCount);
+    printEndSeparator();
 
-
+    // ========== TIMING: File open ==========
+    clock_t fileOpenStart = clock();
     std::ofstream outFile("rcs_results.csv");
     outFile << "# Frequency: " << config.freq << "\n# Grid: " << config.nx << "x" << config.ny << "\n";
     outFile << "# GridSize: " << config.gridSize << "\n# ThetaSamples: " << config.thetaSamples << "\n";
     outFile << "# PhiSamples: " << config.phiSamples << "\n" << "theta,phi,rcs_m2,rcs_dbsm\n";
+    clock_t fileOpenEnd = clock();
+    double fileOpenTime = double(fileOpenEnd - fileOpenStart) / CLOCKS_PER_SEC;
 
-    runSweep(config, buffers, bvhData, outFile);
+    // ========== Run sweep (with detailed timing inside) ==========
+    sweepResults results = runSweep(config, buffers, bvhData, outFile);
 
+    // ========== TIMING: File close ==========
+    clock_t fileCloseStart = clock();
+    outFile.close();
+    clock_t fileCloseEnd = clock();
+    double fileCloseTime = double(fileCloseEnd - fileCloseStart) / CLOCKS_PER_SEC;
+
+    // ========== TIMING: Cleanup ==========
+    clock_t cleanupStart = clock();
+    
     printSeparator("CLEANUP");
     freeDeviceBuffers(buffers);
     checkCudaErrors(cudaFree(bvhData.triangles));
     checkCudaErrors(cudaFree(bvhData.nodes));
     std::cerr << "│  Device memory released. Success.\n";
+    printEndSeparator();
+    
+    clock_t cleanupEnd = clock();
+    double cleanupTime = double(cleanupEnd - cleanupStart) / CLOCKS_PER_SEC;
+
+    // ========== Total application time ==========
+    clock_t appEndTime = clock();
+    double totalAppTime = double(appEndTime - appStartTime) / CLOCKS_PER_SEC;
+
+    // ========== Print final timing summary ==========
+    printSeparator("TOTAL TIMING BREAKDOWN");
+    printKv("Model Loading", modelLoadTime * 1000.0, "ms");
+    printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
+    printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
+    printKv("File Open/Header", fileOpenTime * 1000.0, "ms");
+    printKv("Sweep Execution", results.totalTimeSeconds * 1000.0, "ms");
+    printKv("File Close", fileCloseTime * 1000.0, "ms");
+    printKv("Cleanup", cleanupTime * 1000.0, "ms");
+    printKv("─────────────────", "");
+    printKv("Total App Time", totalAppTime * 1000.0, "ms");
     printEndSeparator();
 
     return 0;
