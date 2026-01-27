@@ -75,7 +75,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     dim3 threads(config.tpbx, config.tpby);
     dim3 blocks(
         (config.nx + config.tpbx - 1) / config.tpbx, 
-        (config.ny + config.tpby) / config.tpby
+        (config.ny + config.tpby - 1) / config.tpby  // BUG FIX: was missing -1
     );
 
     printSeparator("EXECUTING SWEEP");
@@ -123,8 +123,8 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             vec3 vVec = unitVector(cross(dir, uVec)) * config.gridSize;
             vec3 llc = (dir * distanceOffset) - 0.5f * uVec - 0.5f * vVec;
 
-            buffers.accum->x = 0.0f;
-            buffers.accum->y = 0.0f;
+            // Reset accumulator on device using memset (fast, asynchronous)
+            checkCudaErrors(cudaMemset(buffers.accum, 0, sizeof(cuFloatComplex)));
 
             launchRaysMultiBounce<<<blocks, threads>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
@@ -138,8 +138,12 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                 nRays, k, rayDir, rayArea, buffers.accum, config.reflectionConst);
             checkCudaErrors(cudaDeviceSynchronize());
 
-            float sigma = 4.0f * M_PI * (buffers.accum->x * buffers.accum->x
-                         + buffers.accum->y * buffers.accum->y);
+            // Copy accumulator result from device to host
+            checkCudaErrors(cudaMemcpy(buffers.accumHost, buffers.accum, 
+                                       sizeof(cuFloatComplex), cudaMemcpyDeviceToHost));
+
+            float sigma = 4.0f * M_PI * (buffers.accumHost->x * buffers.accumHost->x
+                         + buffers.accumHost->y * buffers.accumHost->y);
             float rcsDbsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));
 
             outFile << thetaDeg << "," << phiDeg << "," << sigma << "," << rcsDbsm << "\n";
@@ -148,14 +152,17 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             double iterTime = double(iterEnd - iterStart) / CLOCKS_PER_SEC;
 
             if (config.showHitStats) {
-                // can be done with a kernel, but minor
+                // Copy hitCount from device to host for statistics
+                checkCudaErrors(cudaMemcpy(buffers.hitCountHost, buffers.hitCount,
+                                           nRays * sizeof(int), cudaMemcpyDeviceToHost));
+                
                 int maxHits = 0;
                 int zeroCount = 0;
                 long long sumHits = 0;
                 int nonZeroCount = 0;
 
                 for (int n = 0; n < nRays; n++) {
-                    int val = buffers.hitCount[n];
+                    int val = buffers.hitCountHost[n];
                     if (val == 0) {
                         zeroCount++;
                     } else {

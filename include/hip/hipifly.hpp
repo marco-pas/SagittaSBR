@@ -34,6 +34,7 @@
 #define cudaMemsetAsync hipMemsetAsync
 #define cudaFreeAsync hipFreeAsync
 #define cudaMallocHost hipHostMalloc // hipMallocHost is deprecated, and there is no cudaHostMalloc but cudaHostAlloc
+#define cudaMallocManaged hipMallocManaged
 
 // Memory Types
 #define cudaMemcpyHostToDevice hipMemcpyHostToDevice
@@ -67,7 +68,9 @@
 #define cudaTextureDesc hipTextureDesc
 
 // Unified Memory Management
-#define cudaMallocManaged hipMallocManaged
+// NOTE: hipMallocManaged has VERY poor performance on AMD GPUs!
+// Prefer explicit device memory + memcpy for performance-critical code.
+// #define cudaMallocManaged hipMallocManaged  // Already defined above
 #define cudaMemPrefetchAsync hipMemPrefetchAsync
 
 // Cooperative Groups
@@ -78,14 +81,20 @@
 
 
 // Warp/Wavefront primitives
-// Note: AMD GPUs use 64-thread wavefronts vs NVIDIA's 32-thread warps
-#define __shfl_down_sync(x, y, z) __shfl_down(y, z)
-#define __shfl_sync(x, y, z) __shfl(y, z)
+// AMD GPUs use 64-thread wavefronts vs NVIDIA's 32-thread warps
+// Note: HIP intrinsics don't require a mask parameter (it's implicit)
+// __shfl_down_sync -> __shfl_down (mask is ignored on AMD)
+#define __shfl_down_sync(mask, val, delta) __shfl_down(val, delta)
+#define __shfl_sync(mask, val, srcLane) __shfl(val, srcLane)
+#define __shfl_up_sync(mask, val, delta) __shfl_up(val, delta)
+#define __shfl_xor_sync(mask, val, laneMask) __shfl_xor(val, laneMask)
 #define __ballot_sync(mask, predicate) __ballot(predicate)
 #define __any_sync(mask, predicate) __any(predicate)
 #define __all_sync(mask, predicate) __all(predicate)
 #define __activemask() __ballot(1)
-#define __syncwarp(mask) __syncthreads()
+// AMD wavefronts execute in lockstep, so __syncwarp is effectively a no-op
+// However, for memory visibility we should use __threadfence_block()
+#define __syncwarp(mask) __threadfence_block()
 
 // Complex number types
 #define cuFloatComplex hipFloatComplex

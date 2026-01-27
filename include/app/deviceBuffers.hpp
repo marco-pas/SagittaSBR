@@ -15,8 +15,10 @@ struct deviceBuffers {
     vec3* hitNormal = nullptr;
     float* hitDist = nullptr;
     int* hitFlag = nullptr;
-    int* hitCount = nullptr;
-    cuFloatComplex* accum = nullptr;
+    int* hitCount = nullptr;        // Device memory
+    int* hitCountHost = nullptr;    // Host-pinned memory for stats
+    cuFloatComplex* accum = nullptr;      // Device memory for atomic ops
+    cuFloatComplex* accumHost = nullptr;  // Host-pinned memory for reading results
     int count = 0;
 };
 
