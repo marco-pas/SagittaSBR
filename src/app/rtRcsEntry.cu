@@ -69,7 +69,9 @@ int runRcsApp(int argc, char** argv) {
         return 1;
     }
 
+#ifndef USE_HIP
     nvtxRangePushA("Read Mesh");
+#endif
 
     modelLoader::MeshData mesh;
     std::string modelError;
@@ -130,14 +132,20 @@ int runRcsApp(int argc, char** argv) {
         triangles.push_back(tri);
     }
 
+#ifndef USE_HIP
     nvtxRangePop();
+#endif
 
     bvhBuildOptions buildOptions;
     // Switch buildOptions.algorithm to bvhBuildAlgorithm::Simple for the median splitter.
 
+#ifndef USE_HIP
     nvtxRangePushA("build BVH");
+#endif
     bvhBuildResult bvh = buildBvh(std::move(triangles), buildOptions);
+#ifndef USE_HIP
     nvtxRangePop();
+#endif
 
     printSeparator("MEMORY ALLOCATION");
     deviceBuffers buffers;

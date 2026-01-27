@@ -3,6 +3,7 @@
 
 #if defined(USE_HIP)
 #include <hip/hip_runtime.h>
+#include "hip/hipifly.hpp"
 #else
 #include <cuda_runtime.h>
 #endif

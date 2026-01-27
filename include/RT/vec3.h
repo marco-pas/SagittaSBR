@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <iostream>
 
-#ifndef __CUDACC__
+#if !defined(__CUDACC__) && !defined(__HIPCC__)
 #define __host__
 #define __device__
 #endif

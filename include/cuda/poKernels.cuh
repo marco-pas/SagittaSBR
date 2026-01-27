@@ -4,6 +4,7 @@
 #if defined(USE_HIP)
 #include <hip/hip_runtime.h>
 #include <hip/hip_complex.h>
+#include "hip/hipifly.hpp"
 #else
 #include <cuComplex.h>
 #endif

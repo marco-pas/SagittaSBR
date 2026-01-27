@@ -26,7 +26,7 @@ if(USE_HIP)
     endif()
     
     find_package(hip REQUIRED)
-    find_package(hiprand REQUIRED)
+    find_package(rocrand REQUIRED)
     find_package(hipblas REQUIRED)
 else()
     set(CMAKE_CUDA_STANDARD 17)
@@ -88,9 +88,8 @@ endif()
 if(USE_HIP)
     target_link_libraries(projectOptions
         INTERFACE
-            hip::device
             hip::host
-            roc::hiprand
+            roc::rocrand
             roc::hipblas
     )
 else()

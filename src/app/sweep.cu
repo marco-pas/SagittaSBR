@@ -22,7 +22,9 @@
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                       const bvhGpuData& bvhData, std::ostream& outFile) {
 
+#ifndef USE_HIP
     nvtxRangePushA("runSweep");
+#endif
     
     // physical params
     const float c0 = 299792458.0f;
@@ -199,7 +201,9 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
     
 
+#ifndef USE_HIP
     nvtxRangePop();
+#endif
 
     return sweepResults{totalIterations, totalTime};
 }
