@@ -71,11 +71,11 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     }
 
 
-    dim3 threads(config.tpbx, config.tpby);
-    dim3 blocks(
-        (config.nx + config.tpbx - 1) / config.tpbx, 
-        (config.ny + config.tpby - 1) / config.tpby  // BUG FIX: was missing -1
-    );
+    // Use centralized GPU configuration for optimal block sizes per platform
+    // AMD: 8x8 = 64 threads (1 wavefront) - reduces BVH divergence
+    // NVIDIA: 16x16 = 256 threads (8 warps) - good occupancy
+    dim3 rtThreads(GPU_RT_BLOCK_X, GPU_RT_BLOCK_Y);
+    dim3 rtBlocks(GPU_RT_GRID_X(config.nx), GPU_RT_GRID_Y(config.ny));
 
     // ========== Create GPU events for detailed timing ==========
     cudaEvent_t rtKernelStart, rtKernelStop;
@@ -140,7 +140,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
             // ========== TIMING: Ray tracing kernel ==========
             checkCudaErrors(cudaEventRecord(rtKernelStart));
-            launchRaysMultiBounce<<<blocks, threads>>>(
+            launchRaysMultiBounce<<<rtBlocks, rtThreads>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
                 config.nx, config.ny, llc, uVec, vVec, rayDir,
                 bvhData.triangles, bvhData.nodes, bvhData.rootIndex,
@@ -149,7 +149,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
             // ========== TIMING: PO integration kernel ==========
             checkCudaErrors(cudaEventRecord(poKernelStart));
-            integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_BLOCK_SIZE_1D), GPU_BLOCK_SIZE_1D>>>(
+            integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_PO_BLOCK_SIZE), GPU_PO_BLOCK_SIZE>>>(
                 buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
                 nRays, k, rayDir, rayArea, buffers.accum, config.reflectionConst);
             checkCudaErrors(cudaEventRecord(poKernelStop));

@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 3.25)
 
+# ============================================================================
+# Build Configuration - Default to Release with high optimizations
+# ============================================================================
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "Setting build type to 'Release' as none was specified.")
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "RelWithDebInfo" "MinSizeRel")
+endif()
+
 # Option to enable HIP (AMD GPU) instead of CUDA (NVIDIA GPU)
 option(USE_HIP "Build with HIP for AMD GPUs instead of CUDA" OFF)
 
@@ -68,9 +77,34 @@ target_compile_features(projectOptions
         cxx_std_23
 )
 
+# ============================================================================
+# Optimization Flags - High performance by default
+# ============================================================================
+# Release optimization flags for C/C++
 target_compile_options(projectOptions
     INTERFACE
-        -Wall -Wextra 
+        $<$<CONFIG:Release>:-O3 -march=native -funroll-loops>
+        $<$<CONFIG:RelWithDebInfo>:-O2 -g>
+        $<$<CONFIG:Debug>:-O0 -g>
+)
+
+# GPU-specific optimization flags
+if(USE_HIP)
+    target_compile_options(projectOptions
+        INTERFACE
+            $<$<COMPILE_LANGUAGE:HIP>:-O3 -ffast-math>
+    )
+else()
+    target_compile_options(projectOptions
+        INTERFACE
+            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
+    )
+endif()
+
+# Warning flags (separate from optimization)
+target_compile_options(projectOptions
+    INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra>
 )
 
 if(enableWarningsAsErrors)
