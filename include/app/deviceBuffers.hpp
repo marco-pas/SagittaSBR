@@ -4,11 +4,9 @@
 #include "RT/vec3.h"        // includes precision.h → Real, cuRealComplex
 
 struct deviceBuffers {
-    vec3* hitPos = nullptr;
     vec3* hitNormal = nullptr;
     vec3* lastDir = nullptr;        // Last-bounce incoming ray direction
     Real* hitDist = nullptr;
-    int* hitFlag = nullptr;
     int* hitCount = nullptr;        // Device memory
     int* hitCountHost = nullptr;    // Host-pinned memory for stats
     cuRealComplex* accum = nullptr;      // Device memory for atomic ops

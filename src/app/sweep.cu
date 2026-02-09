@@ -94,20 +94,72 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     dim3 rtThreads(GPU_RT_BLOCK_X, GPU_RT_BLOCK_Y);
     dim3 rtBlocks(GPU_RT_GRID_X(config.nx), GPU_RT_GRID_Y(config.ny));
 
-    // Create GPU events for timing
-    cudaEvent_t rtKernelStart, rtKernelStop;
-    cudaEvent_t poKernelStart, poKernelStop;
-    cudaEvent_t memsetStart, memsetStop;
-    cudaEvent_t memcpyStart, memcpyStop;
-    
-    checkCudaErrors(cudaEventCreate(&rtKernelStart));
-    checkCudaErrors(cudaEventCreate(&rtKernelStop));
-    checkCudaErrors(cudaEventCreate(&poKernelStart));
-    checkCudaErrors(cudaEventCreate(&poKernelStop));
-    checkCudaErrors(cudaEventCreate(&memsetStart));
-    checkCudaErrors(cudaEventCreate(&memsetStop));
-    checkCudaErrors(cudaEventCreate(&memcpyStart));
-    checkCudaErrors(cudaEventCreate(&memcpyStop));
+    // ========================================================================
+    // Multi-stream pipeline with double-buffered accumulators
+    // ========================================================================
+    //
+    // Two streams allow overlapping computation with data movement:
+    //   computeStream  – memset, RT kernel, PO kernel (all serialized here
+    //                     because RT and PO share the hit-data buffers)
+    //   transferStream – D2H copy of the accumulator result
+    //
+    // Two accum buffers (device + host) let iteration N+1's kernels run on
+    // computeStream while iteration N's result is still being transferred
+    // and processed on the CPU.
+    //
+    // Timeline (simplified):
+    //   computeStream:  |--RT[0]--PO[0]--|--RT[1]--PO[1]--|--RT[2]--...
+    //   transferStream:          |D2H[0]--|       |D2H[1]--|
+    //   CPU:                       |proc[0]|        |proc[1]|
+    //
+    // The poComplete event ensures transferStream waits for PO to finish
+    // before starting the D2H copy. The computeStream serializes RT→PO
+    // naturally, and cannot start RT[N+1] until PO[N] is done (same stream).
+    // ========================================================================
+
+    constexpr int NUM_BUFS = 2;
+
+    // Streams
+    cudaStream_t computeStream, transferStream;
+    checkCudaErrors(cudaStreamCreate(&computeStream));
+    checkCudaErrors(cudaStreamCreate(&transferStream));
+
+    // Double-buffered accumulators (device + pinned host)
+    cuRealComplex* accumDev[NUM_BUFS];
+    cuRealComplex* accumHost[NUM_BUFS];
+    accumDev[0]  = buffers.accum;      // reuse existing allocation
+    accumHost[0] = buffers.accumHost;
+    checkCudaErrors(cudaMalloc(&accumDev[1], sizeof(cuRealComplex)));
+    checkCudaErrors(cudaMallocHost(&accumHost[1], sizeof(cuRealComplex)));
+
+    // Synchronization: signals when PO kernel is done on computeStream
+    cudaEvent_t poComplete;
+    checkCudaErrors(cudaEventCreate(&poComplete));
+
+    // Per-buffer event: marks when the iteration's RT kernel STARTS on
+    // computeStream.  Used by the showHitStats path to make the next RT
+    // kernel wait until the CPU has finished reading the shared hitCount
+    // buffer from the previous iteration.
+    cudaEvent_t hitCountCopied;
+    checkCudaErrors(cudaEventCreateWithFlags(&hitCountCopied, cudaEventDisableTiming));
+
+    // Per-buffer timing events (one set per buffer so we can query while
+    // the other buffer's events are still being recorded)
+    cudaEvent_t rtKernelStart[NUM_BUFS], rtKernelStop[NUM_BUFS];
+    cudaEvent_t poKernelStart[NUM_BUFS], poKernelStop[NUM_BUFS];
+    cudaEvent_t memsetStart[NUM_BUFS],   memsetStop[NUM_BUFS];
+    cudaEvent_t memcpyStart[NUM_BUFS],   memcpyStop[NUM_BUFS];
+
+    for (int b = 0; b < NUM_BUFS; ++b) {
+        checkCudaErrors(cudaEventCreate(&rtKernelStart[b]));
+        checkCudaErrors(cudaEventCreate(&rtKernelStop[b]));
+        checkCudaErrors(cudaEventCreate(&poKernelStart[b]));
+        checkCudaErrors(cudaEventCreate(&poKernelStop[b]));
+        checkCudaErrors(cudaEventCreate(&memsetStart[b]));
+        checkCudaErrors(cudaEventCreate(&memsetStop[b]));
+        checkCudaErrors(cudaEventCreate(&memcpyStart[b]));
+        checkCudaErrors(cudaEventCreate(&memcpyStop[b]));
+    }
 
     // Timing accumulators (per rank)
     double totalRtKernelMs = 0.0;
@@ -140,103 +192,76 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     std::vector<IterationResult> localResults;
     localResults.reserve(myCount);
 
-    // Single flattened loop - each rank processes its assigned subset
+    // How often to print progress (1 = every iteration, 100 = every 100th, etc.)
+    // When showHitStats is enabled, non-printed iterations skip the expensive
+    // 320 MB hitCount D2H + 80M-element CPU loop, saving ~20 ms/iter.
+    constexpr int PRINT_INTERVAL = 100;
 
-    // Start of Theta + Phi loop with MPI
+    // Counter for completed iterations on this rank (used for print interval)
+    int completedCount = 0;
 
-    for (int globalIdx = myStart; globalIdx < myEnd; ++globalIdx) {
-        // Convert flat index back to theta and phi indices
-        const int t = globalIdx / config.phiSamples;
-        const int p = globalIdx % config.phiSamples;
+    // Whether the next RT kernel must wait for a hitCount D2H on the CPU side.
+    // Set to true after processResult records hitCountCopied on the host;
+    // consumed by the next kernel-submit block which inserts a
+    // cudaStreamWaitEvent before the RT kernel launch.
+    bool needHitCountFence = false;
 
-        // Calculate theta and phi values
-        Real thetaDeg = config.thetaStart + (config.thetaSamples > 1
-            ? t * (config.thetaEnd - config.thetaStart) / (config.thetaSamples - 1)
-            : 0);
-        Real thetaRad = thetaDeg * Real(M_PI) / REAL_CONST(180.0);
+    // ========================================================================
+    // Helper lambda: process a completed iteration's result.
+    // Called after the transfer stream has been synchronized for that buffer.
+    // Collects timing + RCS unconditionally; prints only every PRINT_INTERVAL.
+    // ========================================================================
+    auto processResult = [&](int buf, int prevGlobalIdx, Real prevThetaDeg,
+                             Real prevPhiDeg) {
+        // Query timing events (all guaranteed complete after transfer sync)
+        float rtMs = 0.0f, poMs = 0.0f, msMs = 0.0f, cpMs = 0.0f;
+        checkCudaErrors(cudaEventElapsedTime(&msMs, memsetStart[buf], memsetStop[buf]));
+        checkCudaErrors(cudaEventElapsedTime(&rtMs, rtKernelStart[buf], rtKernelStop[buf]));
+        checkCudaErrors(cudaEventElapsedTime(&poMs, poKernelStart[buf], poKernelStop[buf]));
+        checkCudaErrors(cudaEventElapsedTime(&cpMs, memcpyStart[buf], memcpyStop[buf]));
 
-        Real phiDeg = config.phiStart + (config.phiSamples > 1
-            ? p * (config.phiEnd - config.phiStart) / (config.phiSamples - 1)
-            : 0);
-        Real phiRad = phiDeg * Real(M_PI) / REAL_CONST(180.0);
+        totalMemsetMs   += msMs;
+        totalRtKernelMs += rtMs;
+        totalPoKernelMs += poMs;
+        totalMemcpyMs   += cpMs;
 
-        // Calculate ray direction and basis vectors
-        vec3 dir(
-            realSin(thetaRad) * realCos(phiRad), 
-            realSin(thetaRad) * realSin(phiRad), 
-            realCos(thetaRad)
-        );
-
-        vec3 rayDir = -dir;
-
-        vec3 up(0, 1, 0);
-        if (realAbs(dir.y()) > REAL_CONST(0.99)) {
-            up = vec3(1, 0, 0);
-        }
-
-        vec3 uVec = unitVector(cross(up, dir)) * config.gridSize;
-        vec3 vVec = unitVector(cross(dir, uVec)) * config.gridSize;
-        vec3 llc = (dir * distanceOffset) - REAL_CONST(0.5) * uVec - REAL_CONST(0.5) * vVec;
-
-        // ========== TIMING: Memset ==========
-        checkCudaErrors(cudaEventRecord(memsetStart));
-        checkCudaErrors(cudaMemset(buffers.accum, 0, sizeof(cuRealComplex)));
-        checkCudaErrors(cudaEventRecord(memsetStop));
-
-        // ========== TIMING: Ray tracing kernel ==========
-        checkCudaErrors(cudaEventRecord(rtKernelStart));
-        launchRaysMultiBounce<<<rtBlocks, rtThreads>>>(
-            buffers.hitPos, buffers.hitNormal, buffers.lastDir,
-            buffers.hitDist, buffers.hitCount,
-            config.nx, config.ny, llc, uVec, vVec, rayDir,
-            bvhData.triangles, bvhData.nodes, bvhData.rootIndex,
-            config.maxBounces);
-        checkCudaErrors(cudaEventRecord(rtKernelStop));
-
-        // ========== TIMING: PO integration kernel ==========
-        checkCudaErrors(cudaEventRecord(poKernelStart));
-        integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_PO_BLOCK_SIZE), GPU_PO_BLOCK_SIZE>>>(
-            buffers.hitPos, buffers.hitNormal, buffers.lastDir,
-            buffers.hitDist, buffers.hitCount,
-            nRays, k, rayDir, rayArea, buffers.accum, config.reflectionConst);
-        checkCudaErrors(cudaEventRecord(poKernelStop));
-
-        // ========== TIMING: Device to host memcpy ==========
-        checkCudaErrors(cudaEventRecord(memcpyStart));
-        checkCudaErrors(cudaMemcpy(buffers.accumHost, buffers.accum, 
-                                   sizeof(cuRealComplex), cudaMemcpyDeviceToHost));
-        checkCudaErrors(cudaEventRecord(memcpyStop));
-        checkCudaErrors(cudaEventSynchronize(memcpyStop));
-
-        // Get timing results
-        float rtKernelMs = 0.0f, poKernelMs = 0.0f, memsetMs = 0.0f, memcpyMs = 0.0f;
-        checkCudaErrors(cudaEventElapsedTime(&memsetMs, memsetStart, memsetStop));
-        checkCudaErrors(cudaEventElapsedTime(&rtKernelMs, rtKernelStart, rtKernelStop));
-        checkCudaErrors(cudaEventElapsedTime(&poKernelMs, poKernelStart, poKernelStop));
-        checkCudaErrors(cudaEventElapsedTime(&memcpyMs, memcpyStart, memcpyStop));
-
-        totalMemsetMs += memsetMs;
-        totalRtKernelMs += rtKernelMs;
-        totalPoKernelMs += poKernelMs;
-        totalMemcpyMs += memcpyMs;
-
-        // Calculate RCS
-        Real sigma = REAL_CONST(4.0) * Real(M_PI) * (buffers.accumHost->x * buffers.accumHost->x
-                     + buffers.accumHost->y * buffers.accumHost->y);
+        // Calculate RCS from the completed buffer
+        Real sigma = REAL_CONST(4.0) * Real(M_PI)
+                     * (accumHost[buf]->x * accumHost[buf]->x
+                      + accumHost[buf]->y * accumHost[buf]->y);
         Real rcsDbsm = REAL_CONST(10.0) * realLog10(realFmax(sigma, REAL_CONST(1e-10)));
 
-        // Store result
-        localResults.push_back({globalIdx, thetaDeg, phiDeg, sigma, rcsDbsm});
+        localResults.push_back({prevGlobalIdx, prevThetaDeg, prevPhiDeg, sigma, rcsDbsm});
 
-        float totalIterMs = memsetMs + rtKernelMs + poKernelMs + memcpyMs;
+        ++completedCount;
 
-        // Print progress with rank info
+        // Only print every PRINT_INTERVAL iterations (and always print the last)
+        bool isLast = (prevGlobalIdx == myEnd - 1);
+        if (completedCount % PRINT_INTERVAL != 0 && !isLast) return;
+
+        float totalIterMs = msMs + rtMs + poMs + cpMs;
+
+        // Print progress — this runs while the GPU is busy with the next iteration
         if (config.showHitStats) {
             clock_t statsStart = clock();
-            
+
+            // hitCount is a shared buffer written by the RT kernel.
+            // The next iteration's RT kernel has already been submitted to
+            // computeStream but is blocked by a cudaStreamWaitEvent on
+            // hitCountCopied.  We read hitCount here, then record the event
+            // to release the pending RT kernel.
+            //
+            // The previous iteration's PO kernel (which was the last writer
+            // after RT on computeStream) is guaranteed complete because the
+            // transferStream D2H (which we just synchronized) waited on the
+            // poComplete event.
             checkCudaErrors(cudaMemcpy(buffers.hitCountHost, buffers.hitCount,
                                        nRays * sizeof(int), cudaMemcpyDeviceToHost));
-            
+
+            // Release the pending RT kernel on computeStream
+            checkCudaErrors(cudaEventRecord(hitCountCopied));
+            needHitCountFence = false;
+
             int maxHits = 0;
             int zeroCount = 0;
             long long sumHits = 0;
@@ -259,37 +284,181 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
             Real avgHits = (nonZeroCount > 0) ? static_cast<Real>(sumHits) / nonZeroCount : REAL_CONST(0.0);
 
-            std::cerr << "[R" << rank << ":" << std::setw(3) << globalIdx + 1 << "/"
+            std::cerr << "[R" << rank << ":" << std::setw(3) << prevGlobalIdx + 1 << "/"
                 << totalIterations << "]"
-                << " │ Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
-                << " │ Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                << " │ RT: " << std::fixed << std::setprecision(2) << rtKernelMs << "ms"
-                << " │ PO: " << poKernelMs << "ms"
+                << " │ Θ: " << std::setw(3) << static_cast<int>(prevThetaDeg) << "°"
+                << " │ Φ: " << std::setw(3) << static_cast<int>(prevPhiDeg) << "°"
+                << " │ RT: " << std::fixed << std::setprecision(2) << rtMs << "ms"
+                << " │ PO: " << poMs << "ms"
                 << " │ Tot: " << totalIterMs << "ms"
                 << " │ Hit: " << std::setprecision(0) << 100.0f - (100.0f * zeroCount / nRays) << "%"
                 << " │ Bounces: " << std::setprecision(2) << avgHits
                 << "\n";
         } else {
-            std::cerr << "[R" << rank << ":" << std::setw(3) << globalIdx + 1 << "/"
+            std::cerr << "[R" << rank << ":" << std::setw(3) << prevGlobalIdx + 1 << "/"
                 << totalIterations << "]"
-                << " │ Θ: " << std::setw(3) << static_cast<int>(thetaDeg) << "°"
-                << " │ Φ: " << std::setw(3) << static_cast<int>(phiDeg) << "°"
-                << " │ RT: " << std::fixed << std::setprecision(2) << rtKernelMs << "ms"
-                << " │ PO: " << poKernelMs << "ms"
+                << " │ Θ: " << std::setw(3) << static_cast<int>(prevThetaDeg) << "°"
+                << " │ Φ: " << std::setw(3) << static_cast<int>(prevPhiDeg) << "°"
+                << " │ RT: " << std::fixed << std::setprecision(2) << rtMs << "ms"
+                << " │ PO: " << poMs << "ms"
                 << " │ Total: " << totalIterMs << "ms"
                 << "\n";
         }
+    };
+
+    // ========================================================================
+    // Main sweep loop — pipelined
+    // ========================================================================
+    //
+    //  Iteration timeline (GPU busy while CPU processes previous result):
+    //
+    //  computeStream:  |memset+RT[0]+PO[0]|memset+RT[1]+PO[1]|memset+RT[2]...
+    //  transferStream:           |D2H[0]--|        |D2H[1]--|
+    //  CPU:            angles[0] submit[0] angles[1] submit[1] drain[0] ...
+    //                                                         ↑ GPU is running
+    //
+    //  Key: kernel submission happens BEFORE draining the previous result,
+    //  so the GPU starts new work immediately while the CPU catches up.
+    //
+    //  When showHitStats is enabled and a print is due, the next RT kernel
+    //  is held back via cudaStreamWaitEvent(hitCountCopied) so the CPU can
+    //  safely read the shared hitCount buffer.  The memset for that iteration
+    //  still runs (it doesn't touch hitCount), limiting the stall.
+    // ========================================================================
+    bool hasPending = false;
+    int pendingBuf = 0;
+    int pendingGlobalIdx = 0;
+    Real pendingThetaDeg = REAL_CONST(0.0);
+    Real pendingPhiDeg   = REAL_CONST(0.0);
+
+    for (int globalIdx = myStart; globalIdx < myEnd; ++globalIdx) {
+        int buf = (globalIdx - myStart) % NUM_BUFS;
+
+        // ====== 1. CPU: compute angles (pure CPU, overlaps with GPU tail) ======
+        const int t = globalIdx / config.phiSamples;
+        const int p = globalIdx % config.phiSamples;
+
+        Real thetaDeg = config.thetaStart + (config.thetaSamples > 1
+            ? t * (config.thetaEnd - config.thetaStart) / (config.thetaSamples - 1)
+            : 0);
+        Real thetaRad = thetaDeg * Real(M_PI) / REAL_CONST(180.0);
+
+        Real phiDeg = config.phiStart + (config.phiSamples > 1
+            ? p * (config.phiEnd - config.phiStart) / (config.phiSamples - 1)
+            : 0);
+        Real phiRad = phiDeg * Real(M_PI) / REAL_CONST(180.0);
+
+        vec3 dir(
+            realSin(thetaRad) * realCos(phiRad), 
+            realSin(thetaRad) * realSin(phiRad), 
+            realCos(thetaRad)
+        );
+
+        vec3 rayDir = -dir;
+
+        vec3 up(0, 1, 0);
+        if (realAbs(dir.y()) > REAL_CONST(0.99)) {
+            up = vec3(1, 0, 0);
+        }
+
+        vec3 uVec = unitVector(cross(up, dir)) * config.gridSize;
+        vec3 vVec = unitVector(cross(dir, uVec)) * config.gridSize;
+        vec3 llc = (dir * distanceOffset) - REAL_CONST(0.5) * uVec - REAL_CONST(0.5) * vVec;
+
+        // ====== 2. Submit GPU work on computeStream (GPU starts ASAP) ======
+
+        // Memset this buffer's accumulator (safe even if hitCount fence is
+        // pending — memset touches accumDev, not hitCount)
+        checkCudaErrors(cudaEventRecord(memsetStart[buf], computeStream));
+        checkCudaErrors(cudaMemsetAsync(accumDev[buf], 0, sizeof(cuRealComplex), computeStream));
+        checkCudaErrors(cudaEventRecord(memsetStop[buf], computeStream));
+
+        // If showHitStats printed on the previous drain, the RT kernel must
+        // wait until the CPU has finished the synchronous hitCount D2H copy
+        // so we don't overwrite the buffer mid-read.
+        if (needHitCountFence) {
+            checkCudaErrors(cudaStreamWaitEvent(computeStream, hitCountCopied));
+            needHitCountFence = false;
+        }
+
+        // Ray tracing kernel
+        checkCudaErrors(cudaEventRecord(rtKernelStart[buf], computeStream));
+        launchRaysMultiBounce<<<rtBlocks, rtThreads, 0, computeStream>>>(
+            buffers.hitNormal, buffers.lastDir,
+            buffers.hitDist, buffers.hitCount,
+            config.nx, config.ny, llc, uVec, vVec, rayDir,
+            bvhData.triangles, bvhData.nodes, bvhData.rootIndex,
+            config.maxBounces);
+        checkCudaErrors(cudaEventRecord(rtKernelStop[buf], computeStream));
+
+        // PO integration kernel — writes to accumDev[buf]
+        checkCudaErrors(cudaEventRecord(poKernelStart[buf], computeStream));
+        integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_PO_BLOCK_SIZE), GPU_PO_BLOCK_SIZE, 0, computeStream>>>(
+            buffers.hitNormal, buffers.lastDir,
+            buffers.hitDist, buffers.hitCount,
+            nRays, k, rayDir, rayArea, accumDev[buf], config.reflectionConst);
+        checkCudaErrors(cudaEventRecord(poKernelStop[buf], computeStream));
+
+        // Signal that PO is done so transferStream can start the D2H copy
+        checkCudaErrors(cudaEventRecord(poComplete, computeStream));
+
+        // D2H copy on transferStream (overlaps with next compute)
+        checkCudaErrors(cudaStreamWaitEvent(transferStream, poComplete));
+        checkCudaErrors(cudaEventRecord(memcpyStart[buf], transferStream));
+        checkCudaErrors(cudaMemcpyAsync(accumHost[buf], accumDev[buf],
+                                        sizeof(cuRealComplex), cudaMemcpyDeviceToHost,
+                                        transferStream));
+        checkCudaErrors(cudaEventRecord(memcpyStop[buf], transferStream));
+
+        // ====== 3. Drain previous result (GPU is now busy with this iter) ======
+        if (hasPending) {
+            checkCudaErrors(cudaStreamSynchronize(transferStream));
+
+            // Determine if processResult will need to read hitCount.
+            // If so, set the fence flag so the NEXT iteration's RT kernel
+            // waits for the read to complete.
+            int nextCompleted = completedCount + 1;
+            bool willPrint = (nextCompleted % PRINT_INTERVAL == 0)
+                          || (pendingGlobalIdx == myEnd - 1);
+            if (config.showHitStats && willPrint) {
+                needHitCountFence = true;
+            }
+
+            processResult(pendingBuf, pendingGlobalIdx, pendingThetaDeg, pendingPhiDeg);
+            hasPending = false;
+        }
+
+        // 4. Mark this iteration as pending
+        hasPending = true;
+        pendingBuf = buf;
+        pendingGlobalIdx = globalIdx;
+        pendingThetaDeg = thetaDeg;
+        pendingPhiDeg = phiDeg;
     }
 
-    // Cleanup GPU events
-    checkCudaErrors(cudaEventDestroy(rtKernelStart));
-    checkCudaErrors(cudaEventDestroy(rtKernelStop));
-    checkCudaErrors(cudaEventDestroy(poKernelStart));
-    checkCudaErrors(cudaEventDestroy(poKernelStop));
-    checkCudaErrors(cudaEventDestroy(memsetStart));
-    checkCudaErrors(cudaEventDestroy(memsetStop));
-    checkCudaErrors(cudaEventDestroy(memcpyStart));
-    checkCudaErrors(cudaEventDestroy(memcpyStop));
+    // ---- Drain the last pending iteration ----
+    if (hasPending) {
+        checkCudaErrors(cudaStreamSynchronize(transferStream));
+        processResult(pendingBuf, pendingGlobalIdx, pendingThetaDeg, pendingPhiDeg);
+    }
+
+    // Cleanup streams, events, and extra buffer
+    checkCudaErrors(cudaStreamDestroy(computeStream));
+    checkCudaErrors(cudaStreamDestroy(transferStream));
+    checkCudaErrors(cudaEventDestroy(poComplete));
+    checkCudaErrors(cudaEventDestroy(hitCountCopied));
+    for (int b = 0; b < NUM_BUFS; ++b) {
+        checkCudaErrors(cudaEventDestroy(rtKernelStart[b]));
+        checkCudaErrors(cudaEventDestroy(rtKernelStop[b]));
+        checkCudaErrors(cudaEventDestroy(poKernelStart[b]));
+        checkCudaErrors(cudaEventDestroy(poKernelStop[b]));
+        checkCudaErrors(cudaEventDestroy(memsetStart[b]));
+        checkCudaErrors(cudaEventDestroy(memsetStop[b]));
+        checkCudaErrors(cudaEventDestroy(memcpyStart[b]));
+        checkCudaErrors(cudaEventDestroy(memcpyStop[b]));
+    }
+    checkCudaErrors(cudaFree(accumDev[1]));
+    checkCudaErrors(cudaFreeHost(accumHost[1]));
 
     clock_t totalSweepEnd = clock();
     double localTime = double(totalSweepEnd - totalSweepStart) / CLOCKS_PER_SEC;

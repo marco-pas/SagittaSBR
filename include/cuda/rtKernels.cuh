@@ -11,12 +11,12 @@
 #include "RT/vec3.h"
 #include "scene/bvh.h"
 
-__global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
-                                      vec3* lastDir,
-                                      Real* hitDist, int* hitCount, int nx,
+__global__ void launchRaysMultiBounce(vec3* __restrict__ hitNormal,
+                                      vec3* __restrict__ lastDir,
+                                      Real* __restrict__ hitDist, int* __restrict__ hitCount, int nx,
                                       int ny, vec3 llc, vec3 horiz, vec3 vert,
-                                      vec3 rayDir, const Triangle* triangles,
-                                      const BvhNode* nodes, int rootIndex,
+                                      vec3 rayDir, const Triangle* __restrict__ triangles,
+                                      const BvhNode* __restrict__ nodes, int rootIndex,
                                       int maxBounces);
 
 #endif

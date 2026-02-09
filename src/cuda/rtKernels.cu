@@ -159,7 +159,7 @@ __device__ bool hitBvh(const Triangle* triangles, const BvhNode* nodes, int root
 
 
 
-__global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
+__global__ void launchRaysMultiBounce(vec3* hitNormal,
                                       vec3* lastDir,
                                       Real* hitDist, int* hitCount, int nx,
                                       int ny, vec3 llc, vec3 horiz, vec3 vert,
@@ -194,7 +194,6 @@ __global__ void launchRaysMultiBounce(vec3* hitPos, vec3* hitNormal,
             
             // Store hit data on every bounce so that after the loop
             // these arrays hold the last-bounce values needed for PO
-            hitPos[idx] = rec.p;
             hitNormal[idx] = rec.normal;
             lastDir[idx] = currentDir;
             

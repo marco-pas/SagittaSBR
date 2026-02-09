@@ -58,39 +58,7 @@ __device__ __forceinline__ Real blockReduceSum(Real val) {
     return val;
 }
 
-__global__ void integratePo(vec3* /* hitPos */, vec3* hitNormal, Real* hitDist,
-                            int* hitFlag, int n, Real k, vec3 kInc,
-                            Real rayArea, cuRealComplex* accum) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    Real localReal = REAL_CONST(0.0);
-    Real localImag = REAL_CONST(0.0);
-
-    if (idx < n && hitFlag[idx]) {
-        Real cosTheta = dot(hitNormal[idx], -kInc);
-        if (cosTheta > REAL_CONST(0.0)) {
-            Real phase = REAL_CONST(2.0) * k * hitDist[idx];
-            Real mag = (k * rayArea / (REAL_CONST(4.0) * Real(M_PI))) * REAL_CONST(2.0);
-            Real sinPhase, cosPhase;
-            devSinCos(phase, &sinPhase, &cosPhase);
-            localReal = -mag * sinPhase;
-            localImag = mag * cosPhase;
-        }
-    }
-
-    // Block-level reduction
-    Real blockSumReal = blockReduceSum(localReal);
-    Real blockSumImag = blockReduceSum(localImag);
-
-    // Only thread 0 does the atomicAdd (one per block instead of one per thread)
-    if (threadIdx.x == 0) {
-        atomicAdd(&accum->x, blockSumReal);
-        atomicAdd(&accum->y, blockSumImag);
-    }
-}
-
 __global__ void integratePoMultiBounce(
-    const vec3* __restrict__ /* hitPos */,
     const vec3* __restrict__ hitNormal,
     const vec3* __restrict__ lastDir,
     const Real* __restrict__ hitDist,
@@ -106,7 +74,11 @@ __global__ void integratePoMultiBounce(
     Real localImag = REAL_CONST(0.0);
 
     if (idx < n && hitCount[idx] > 0) {
-        Real totalReflCoeff = devPow(reflectionConst, static_cast<Real>(hitCount[idx]));
+        // Integer exponentiation: faster than devPow for small bounce counts (1–20)
+        Real totalReflCoeff = REAL_CONST(1.0);
+        for (int b = 0; b < hitCount[idx]; ++b) {
+            totalReflCoeff *= reflectionConst;
+        }
 
         // Use the last-bounce incoming ray direction for the obliquity factor.
         // For single-bounce rays, lastDir == kInc so this is equivalent.

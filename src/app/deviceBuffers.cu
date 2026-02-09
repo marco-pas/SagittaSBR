@@ -13,11 +13,9 @@ void allocateDeviceBuffers(deviceBuffers& buffers, int count) {
     buffers.count = count;
     
     // GPU-only buffers - use device memory (fast on both NVIDIA and AMD)
-    checkCudaErrors(cudaMalloc(&buffers.hitPos, count * sizeof(vec3)));
     checkCudaErrors(cudaMalloc(&buffers.hitNormal, count * sizeof(vec3)));
     checkCudaErrors(cudaMalloc(&buffers.lastDir, count * sizeof(vec3)));
     checkCudaErrors(cudaMalloc(&buffers.hitDist, count * sizeof(Real)));
-    checkCudaErrors(cudaMalloc(&buffers.hitFlag, count * sizeof(int)));
     checkCudaErrors(cudaMalloc(&buffers.hitCount, count * sizeof(int)));
     
     // Accumulator - device memory for atomic operations
@@ -31,11 +29,9 @@ void allocateDeviceBuffers(deviceBuffers& buffers, int count) {
 }
 
 void freeDeviceBuffers(deviceBuffers& buffers) {
-    checkCudaErrors(cudaFree(buffers.hitPos));
     checkCudaErrors(cudaFree(buffers.hitNormal));
     checkCudaErrors(cudaFree(buffers.lastDir));
     checkCudaErrors(cudaFree(buffers.hitDist));
-    checkCudaErrors(cudaFree(buffers.hitFlag));
     checkCudaErrors(cudaFree(buffers.hitCount));
     checkCudaErrors(cudaFree(buffers.accum));
     
