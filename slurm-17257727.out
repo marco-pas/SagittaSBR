@@ -1,0 +1,176 @@
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: AMD Instinct MI250X
+║ Compute Capability: 9.0
+║ Total Global Memory: 63.9844 GB
+║ Multiprocessors: 110
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+
+┌── MEMORY ALLOCATION                              ┐
+│  BVH buffers and world setup complete.
+└──────────────────────────────────────────────────┘
+
+┌── INITIALIZATION TIMING                          ┐
+│ Model Loading       : 617.68 ms
+│ BVH Construction    : 3628.36 ms
+│ GPU Memory Alloc    : 1636.2 ms
+│ Total Init Time     : 5882.24 ms
+│ Triangle Count      : 161962 
+│ BVH Node Count      : 111289 
+└──────────────────────────────────────────────────┘
+Attempting to use an MPI routine before initializing MPICH
+│  BVH buffers and world setup complete.
+└──────────────────────────────────────────────────┘
+
+┌── INITIALIZATION TIMING                          ┐
+│ Model Loading       : 624.005 ms
+│ BVH Construction    : 3709.49 ms
+│ GPU Memory Alloc    : 1633.8 ms
+│ Total Init Time     : 5967.29 ms
+│ Triangle Count      : 161962 
+│ BVH Node Count      : 111289 
+└──────────────────────────────────────────────────┘
+Attempting to use an MPI routine before initializing MPICH
+│  BVH buffers and world setup complete.
+└──────────────────────────────────────────────────┘
+
+┌── INITIALIZATION TIMING                          ┐
+│ Model Loading       : 623.817 ms
+│ BVH Construction    : 3681.57 ms
+│ GPU Memory Alloc    : 1628.68 ms
+│ Total Init Time     : 5934.07 ms
+│ Triangle Count      : 161962 
+│ BVH Node Count      : 111289 
+└──────────────────────────────────────────────────┘
+Attempting to use an MPI routine before initializing MPICH
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries
+srun: error: nid002839: task 6: Exited with exit code 1
+srun: Terminating StepId=17257727.0
+[2026-02-09T13:10:05.581] error: *** STEP 17257727.0 ON nid002822 CANCELLED AT 2026-02-09T13:10:05 DUE TO TASK FAILURE ***
+srun: error: nid002822: task 0: Terminated
+srun: error: nid002824: task 2: Terminated
+srun: error: nid002838: task 5: Terminated
+srun: error: nid002840: task 7: Terminated
+srun: error: nid002837: task 4: Terminated
+srun: error: nid002825: task 3: Terminated
+srun: error: nid002823: task 1: Terminated
+srun: Force Terminated StepId=17257727.0

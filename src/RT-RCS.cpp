@@ -7,7 +7,14 @@
 #include <nvtx3/nvToolsExt.h>
 #endif
 
+#include <mpi.h>
+
 int main(int argc, char** argv) {
+
+    MPI_Init(&argc, &argv);
+
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);  
 
 #ifndef USE_HIP
     nvtxRangePushA("runRcsApp");
@@ -18,4 +25,6 @@ int main(int argc, char** argv) {
 #ifndef USE_HIP
     nvtxRangePop();
 #endif
+
+    MPI_Finalize();
 }

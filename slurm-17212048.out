@@ -1,0 +1,174 @@
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+Using frequency from config file: 1e+10 Hz
+
+┌── MEMORY ALLOCATION                              ┐
+│  BVH buffers and world setup complete.
+└──────────────────────────────────────────────────┘
+
+┌── INITIALIZATION TIMING                          ┐
+│ Model Loading       : 633.991 ms
+│ BVH Construction    : 3677.36 ms
+│ GPU Memory Alloc    : 3123.21 ms
+│ Total Init Time     : 7434.56 ms
+│ Triangle Count      : 161962 
+│ BVH Node Count      : 111289 
+└──────────────────────────────────────────────────┘
+
+┌── SIMULATION PARAMETERS                          ┐
+│ Frequency           : 10 GHz
+│ Wavelength          : 29.9792 mm
+│ Wave Number k       : 209.585 rad/m
+│ Illumination Area   : 10000 m²
+│ Grid Size           : 18000x18000 
+│ Total Rays          : 324000000 
+│ Ray Density         : 32400 rays/m²
+│ Ray Area            : 3.08642e-05 m²
+│ Phi Range           : 0.000000 to 180.000000 
+│ Theta Range         : 0.000000 to 360.000000 
+│ Show GPU info       : 0 
+│ Show Hit info       : 0 
+└──────────────────────────────────────────────────┘
+
+┌── EXECUTING SWEEP                                ┐
+[1  /100] │ Θ: 0  ° │ Φ: 0  ° │ RT: 175.74ms │ PO: 60.73ms │ Total: 236.51ms
+[2  /100] │ Θ: 0  ° │ Φ: 20 ° │ RT: 174.30ms │ PO: 60.65ms │ Total: 234.98ms
+[3  /100] │ Θ: 0  ° │ Φ: 40 ° │ RT: 175.49ms │ PO: 60.59ms │ Total: 236.11ms
+[4  /100] │ Θ: 0  ° │ Φ: 60 ° │ RT: 175.13ms │ PO: 66.85ms │ Total: 242.01ms
+[5  /100] │ Θ: 0  ° │ Φ: 80 ° │ RT: 174.33ms │ PO: 60.67ms │ Total: 235.03ms
+[6  /100] │ Θ: 0  ° │ Φ: 100° │ RT: 174.30ms │ PO: 60.74ms │ Total: 235.07ms
+[7  /100] │ Θ: 0  ° │ Φ: 120° │ RT: 175.10ms │ PO: 60.69ms │ Total: 235.82ms
+[8  /100] │ Θ: 0  ° │ Φ: 140° │ RT: 175.26ms │ PO: 60.70ms │ Total: 235.98ms
+[9  /100] │ Θ: 0  ° │ Φ: 160° │ RT: 174.90ms │ PO: 60.80ms │ Total: 235.73ms
+[10 /100] │ Θ: 0  ° │ Φ: 180° │ RT: 174.60ms │ PO: 60.63ms │ Total: 235.26ms
+[11 /100] │ Θ: 40 ° │ Φ: 0  ° │ RT: 231.38ms │ PO: 50.19ms │ Total: 281.60ms
+[12 /100] │ Θ: 40 ° │ Φ: 20 ° │ RT: 235.63ms │ PO: 51.01ms │ Total: 286.67ms
+[13 /100] │ Θ: 40 ° │ Φ: 40 ° │ RT: 231.86ms │ PO: 55.47ms │ Total: 287.35ms
+[14 /100] │ Θ: 40 ° │ Φ: 60 ° │ RT: 210.33ms │ PO: 51.92ms │ Total: 262.28ms
+[15 /100] │ Θ: 40 ° │ Φ: 80 ° │ RT: 189.16ms │ PO: 51.72ms │ Total: 240.91ms
+[16 /100] │ Θ: 40 ° │ Φ: 100° │ RT: 196.63ms │ PO: 51.76ms │ Total: 248.42ms
+[17 /100] │ Θ: 40 ° │ Φ: 120° │ RT: 208.12ms │ PO: 51.87ms │ Total: 260.02ms
+[18 /100] │ Θ: 40 ° │ Φ: 140° │ RT: 197.79ms │ PO: 51.03ms │ Total: 248.84ms
+[19 /100] │ Θ: 40 ° │ Φ: 160° │ RT: 190.18ms │ PO: 50.17ms │ Total: 240.37ms
+[20 /100] │ Θ: 40 ° │ Φ: 180° │ RT: 179.36ms │ PO: 49.62ms │ Total: 229.01ms
+[21 /100] │ Θ: 80 ° │ Φ: 0  ° │ RT: 180.51ms │ PO: 24.50ms │ Total: 205.04ms
+[22 /100] │ Θ: 80 ° │ Φ: 20 ° │ RT: 190.70ms │ PO: 27.93ms │ Total: 218.66ms
+[23 /100] │ Θ: 80 ° │ Φ: 40 ° │ RT: 158.90ms │ PO: 30.29ms │ Total: 189.22ms
+[24 /100] │ Θ: 80 ° │ Φ: 60 ° │ RT: 142.25ms │ PO: 32.41ms │ Total: 174.69ms
+[25 /100] │ Θ: 80 ° │ Φ: 80 ° │ RT: 106.58ms │ PO: 31.71ms │ Total: 138.31ms
+[26 /100] │ Θ: 80 ° │ Φ: 100° │ RT: 99.04ms │ PO: 33.21ms │ Total: 132.28ms
+[27 /100] │ Θ: 80 ° │ Φ: 120° │ RT: 122.18ms │ PO: 30.69ms │ Total: 152.89ms
+[28 /100] │ Θ: 80 ° │ Φ: 140° │ RT: 139.97ms │ PO: 27.98ms │ Total: 167.98ms
+[29 /100] │ Θ: 80 ° │ Φ: 160° │ RT: 136.64ms │ PO: 25.08ms │ Total: 161.74ms
+[30 /100] │ Θ: 80 ° │ Φ: 180° │ RT: 128.12ms │ PO: 22.54ms │ Total: 150.69ms
+[31 /100] │ Θ: 120° │ Φ: 0  ° │ RT: 245.40ms │ PO: 37.13ms │ Total: 282.56ms
+[32 /100] │ Θ: 120° │ Φ: 20 ° │ RT: 245.38ms │ PO: 38.48ms │ Total: 283.88ms
+[33 /100] │ Θ: 120° │ Φ: 40 ° │ RT: 247.03ms │ PO: 40.82ms │ Total: 287.88ms
+[34 /100] │ Θ: 120° │ Φ: 60 ° │ RT: 226.46ms │ PO: 42.57ms │ Total: 269.06ms
+[35 /100] │ Θ: 120° │ Φ: 80 ° │ RT: 204.26ms │ PO: 42.42ms │ Total: 246.71ms
+[36 /100] │ Θ: 120° │ Φ: 100° │ RT: 209.37ms │ PO: 41.65ms │ Total: 251.05ms
+[37 /100] │ Θ: 120° │ Φ: 120° │ RT: 246.32ms │ PO: 41.97ms │ Total: 288.32ms
+[38 /100] │ Θ: 120° │ Φ: 140° │ RT: 289.57ms │ PO: 41.62ms │ Total: 331.22ms
+[39 /100] │ Θ: 120° │ Φ: 160° │ RT: 291.44ms │ PO: 39.70ms │ Total: 331.17ms
+[40 /100] │ Θ: 120° │ Φ: 180° │ RT: 261.03ms │ PO: 38.72ms │ Total: 299.78ms
+[41 /100] │ Θ: 160° │ Φ: 0  ° │ RT: 244.94ms │ PO: 57.68ms │ Total: 302.65ms
+[42 /100] │ Θ: 160° │ Φ: 20 ° │ RT: 268.97ms │ PO: 57.80ms │ Total: 326.80ms
+[43 /100] │ Θ: 160° │ Φ: 40 ° │ RT: 259.78ms │ PO: 58.07ms │ Total: 317.87ms
+[44 /100] │ Θ: 160° │ Φ: 60 ° │ RT: 260.58ms │ PO: 58.25ms │ Total: 318.85ms
+[45 /100] │ Θ: 160° │ Φ: 80 ° │ RT: 248.42ms │ PO: 58.38ms │ Total: 306.84ms
+[46 /100] │ Θ: 160° │ Φ: 100° │ RT: 262.53ms │ PO: 58.51ms │ Total: 321.07ms
+[47 /100] │ Θ: 160° │ Φ: 120° │ RT: 278.57ms │ PO: 58.96ms │ Total: 337.55ms
+[48 /100] │ Θ: 160° │ Φ: 140° │ RT: 287.98ms │ PO: 61.99ms │ Total: 350.00ms
+[49 /100] │ Θ: 160° │ Φ: 160° │ RT: 286.13ms │ PO: 58.30ms │ Total: 344.45ms
+[50 /100] │ Θ: 160° │ Φ: 180° │ RT: 288.03ms │ PO: 58.04ms │ Total: 346.09ms
+[51 /100] │ Θ: 200° │ Φ: 0  ° │ RT: 288.46ms │ PO: 58.19ms │ Total: 346.67ms
+[52 /100] │ Θ: 200° │ Φ: 20 ° │ RT: 299.44ms │ PO: 58.39ms │ Total: 357.85ms
+[53 /100] │ Θ: 200° │ Φ: 40 ° │ RT: 282.34ms │ PO: 58.51ms │ Total: 340.88ms
+[54 /100] │ Θ: 200° │ Φ: 60 ° │ RT: 266.94ms │ PO: 62.56ms │ Total: 329.53ms
+[55 /100] │ Θ: 200° │ Φ: 80 ° │ RT: 253.22ms │ PO: 58.56ms │ Total: 311.81ms
+[56 /100] │ Θ: 200° │ Φ: 100° │ RT: 248.09ms │ PO: 58.39ms │ Total: 306.50ms
+[57 /100] │ Θ: 200° │ Φ: 120° │ RT: 256.97ms │ PO: 58.33ms │ Total: 315.33ms
+[58 /100] │ Θ: 200° │ Φ: 140° │ RT: 252.03ms │ PO: 58.32ms │ Total: 310.37ms
+[59 /100] │ Θ: 200° │ Φ: 160° │ RT: 248.91ms │ PO: 57.95ms │ Total: 306.88ms
+[60 /100] │ Θ: 200° │ Φ: 180° │ RT: 239.38ms │ PO: 57.84ms │ Total: 297.25ms
+[61 /100] │ Θ: 240° │ Φ: 0  ° │ RT: 275.33ms │ PO: 38.12ms │ Total: 313.48ms
+[62 /100] │ Θ: 240° │ Φ: 20 ° │ RT: 280.32ms │ PO: 39.75ms │ Total: 320.10ms
+[63 /100] │ Θ: 240° │ Φ: 40 ° │ RT: 282.12ms │ PO: 41.69ms │ Total: 323.83ms
+[64 /100] │ Θ: 240° │ Φ: 60 ° │ RT: 244.34ms │ PO: 41.93ms │ Total: 286.30ms
+[65 /100] │ Θ: 240° │ Φ: 80 ° │ RT: 206.68ms │ PO: 41.65ms │ Total: 248.36ms
+[66 /100] │ Θ: 240° │ Φ: 100° │ RT: 221.30ms │ PO: 42.34ms │ Total: 263.66ms
+[67 /100] │ Θ: 240° │ Φ: 120° │ RT: 227.03ms │ PO: 42.65ms │ Total: 269.71ms
+[68 /100] │ Θ: 240° │ Φ: 140° │ RT: 233.40ms │ PO: 40.74ms │ Total: 274.16ms
+[69 /100] │ Θ: 240° │ Φ: 160° │ RT: 242.29ms │ PO: 38.57ms │ Total: 280.88ms
+[70 /100] │ Θ: 240° │ Φ: 180° │ RT: 238.54ms │ PO: 37.26ms │ Total: 275.83ms
+[71 /100] │ Θ: 280° │ Φ: 0  ° │ RT: 123.30ms │ PO: 22.43ms │ Total: 145.76ms
+[72 /100] │ Θ: 280° │ Φ: 20 ° │ RT: 137.17ms │ PO: 25.18ms │ Total: 162.38ms
+[73 /100] │ Θ: 280° │ Φ: 40 ° │ RT: 139.16ms │ PO: 27.57ms │ Total: 166.75ms
+[74 /100] │ Θ: 280° │ Φ: 60 ° │ RT: 140.76ms │ PO: 30.77ms │ Total: 171.56ms
+[75 /100] │ Θ: 280° │ Φ: 80 ° │ RT: 106.36ms │ PO: 32.76ms │ Total: 139.14ms
+[76 /100] │ Θ: 280° │ Φ: 100° │ RT: 110.41ms │ PO: 33.82ms │ Total: 144.26ms
+[77 /100] │ Θ: 280° │ Φ: 120° │ RT: 155.56ms │ PO: 32.64ms │ Total: 188.22ms
+[78 /100] │ Θ: 280° │ Φ: 140° │ RT: 161.14ms │ PO: 30.24ms │ Total: 191.40ms
+[79 /100] │ Θ: 280° │ Φ: 160° │ RT: 191.02ms │ PO: 27.89ms │ Total: 218.94ms
+[80 /100] │ Θ: 280° │ Φ: 180° │ RT: 173.51ms │ PO: 24.48ms │ Total: 198.01ms
+[81 /100] │ Θ: 320° │ Φ: 0  ° │ RT: 180.49ms │ PO: 49.72ms │ Total: 230.24ms
+[82 /100] │ Θ: 320° │ Φ: 20 ° │ RT: 188.38ms │ PO: 50.10ms │ Total: 238.51ms
+[83 /100] │ Θ: 320° │ Φ: 40 ° │ RT: 201.72ms │ PO: 51.27ms │ Total: 253.02ms
+[84 /100] │ Θ: 320° │ Φ: 60 ° │ RT: 187.16ms │ PO: 51.94ms │ Total: 239.12ms
+[85 /100] │ Θ: 320° │ Φ: 80 ° │ RT: 205.66ms │ PO: 51.90ms │ Total: 257.58ms
+[86 /100] │ Θ: 320° │ Φ: 100° │ RT: 202.41ms │ PO: 51.65ms │ Total: 254.09ms
+[87 /100] │ Θ: 320° │ Φ: 120° │ RT: 219.60ms │ PO: 52.01ms │ Total: 271.63ms
+[88 /100] │ Θ: 320° │ Φ: 140° │ RT: 242.38ms │ PO: 51.78ms │ Total: 294.19ms
+[89 /100] │ Θ: 320° │ Φ: 160° │ RT: 240.39ms │ PO: 50.90ms │ Total: 291.32ms
+[90 /100] │ Θ: 320° │ Φ: 180° │ RT: 234.56ms │ PO: 50.26ms │ Total: 284.85ms
+[91 /100] │ Θ: 360° │ Φ: 0  ° │ RT: 176.36ms │ PO: 60.73ms │ Total: 237.11ms
+[92 /100] │ Θ: 360° │ Φ: 20 ° │ RT: 180.47ms │ PO: 60.63ms │ Total: 241.13ms
+[93 /100] │ Θ: 360° │ Φ: 40 ° │ RT: 174.11ms │ PO: 60.90ms │ Total: 235.04ms
+[94 /100] │ Θ: 360° │ Φ: 60 ° │ RT: 186.22ms │ PO: 60.67ms │ Total: 246.92ms
+[95 /100] │ Θ: 360° │ Φ: 80 ° │ RT: 188.67ms │ PO: 60.68ms │ Total: 249.37ms
+[96 /100] │ Θ: 360° │ Φ: 100° │ RT: 194.16ms │ PO: 60.82ms │ Total: 255.01ms
+[97 /100] │ Θ: 360° │ Φ: 120° │ RT: 189.16ms │ PO: 65.12ms │ Total: 254.31ms
+[98 /100] │ Θ: 360° │ Φ: 140° │ RT: 190.16ms │ PO: 64.32ms │ Total: 254.51ms
+[99 /100] │ Θ: 360° │ Φ: 160° │ RT: 183.81ms │ PO: 60.61ms │ Total: 244.45ms
+[100/100] │ Θ: 360° │ Φ: 180° │ RT: 178.45ms │ PO: 60.78ms │ Total: 239.25ms
+└──────────────────────────────────────────────────┘
+
+┌── SWEEP PERFORMANCE BREAKDOWN                    ┐
+│ Ray Tracing Kernel (total): 20846.50 ms
+│ PO Integration Kernel (total): 4811.50 ms
+│ Memset (total)      : 0.70 ms
+│ Memcpy D2H (total)  : 1.25 ms
+│ File Writes (total) : 0.79 ms
+│ ─────────────────:  
+│ GPU Time (kernels only): 25658.00 ms
+│ Total Sweep Wall Time: 25673.73 ms
+└──────────────────────────────────────────────────┘
+
+┌── PER-ITERATION AVERAGES                         ┐
+│ Ray Tracing Kernel  : 208.47 ms
+│ PO Integration Kernel: 48.11 ms
+│ Memset              : 0.01 ms
+│ Memcpy D2H          : 0.01 ms
+│ File Write          : 0.01 ms
+│ ─────────────────:  
+│ Total Points        : 100 
+│ Average Time/Point  : 256.74 ms
+└──────────────────────────────────────────────────┘
+
+┌── CLEANUP                                        ┐
+│  Device memory released. Success.
+└──────────────────────────────────────────────────┘
+
+┌── TOTAL TIMING BREAKDOWN                         ┐
+│ Model Loading       : 633.99 ms
+│ BVH Construction    : 3677.36 ms
+│ GPU Memory Alloc    : 3123.21 ms
+│ File Open/Header    : 0.10 ms
+│ Sweep Execution     : 25673.73 ms
+│ File Close          : 0.21 ms
+│ Cleanup             : 2.92 ms
+│ ─────────────────:  
+│ Total App Time      : 33112.54 ms
+└──────────────────────────────────────────────────┘
+[CRAYBLAS_WARNING] Application linked against multiple cray-libsci libraries

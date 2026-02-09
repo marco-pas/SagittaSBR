@@ -12,14 +12,16 @@ endif()
 # Option to enable HIP (AMD GPU) instead of CUDA (NVIDIA GPU)
 option(USE_HIP "Build with HIP for AMD GPUs instead of CUDA" OFF)
 
+
+project(RT-RCS
+    VERSION 0.1.0
+    LANGUAGES C CXX
+)
+
 if(USE_HIP)
-    project(RT-RCS
-        VERSION 0.1.0
-        LANGUAGES C CXX HIP)
+    enable_language(HIP)
 else()
-    project(RT-RCS
-        VERSION 0.1.0
-        LANGUAGES C CXX CUDA)
+    enable_language(CUDA)
 endif()
 
 set(CMAKE_CXX_STANDARD 23)
@@ -52,6 +54,8 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 find_package(OpenMP)
+
+find_package(MPI REQUIRED)
 
 option(enableWarningsAsErrors "Treat compiler warnings as errors" OFF)
 
@@ -170,3 +174,5 @@ target_link_libraries(RT-RCS
     PRIVATE
         projectOptions
 )
+
+target_link_libraries(RT-RCS PRIVATE MPI::MPI_CXX)

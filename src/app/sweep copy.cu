@@ -37,8 +37,6 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
     // Initialize MPI
     int rank, nProcs;
-
-
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);
 

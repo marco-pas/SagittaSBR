@@ -56,6 +56,9 @@ bool resolveModelFileType(const std::string& path, modelLoader::FileType& outTyp
 }
 
 int runRcsApp(int argc, char** argv) {
+
+    
+
     std::cerr << "╔═══════════════════════════════════════════════════╗\n";
     std::cerr << "║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║\n";
     std::cerr << "╚═══════════════════════════════════════════════════╝\n";
