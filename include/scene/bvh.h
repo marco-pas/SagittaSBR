@@ -3,20 +3,26 @@
 
 #include "RT/vec3.h"
 
-struct alignas(16) Triangle {
-    vec3 v0;
-    vec3 v1;
-    vec3 v2;
+template<typename T>
+struct alignas(16) Triangle_t {
+    vec3_t<T> v0;
+    vec3_t<T> v1;
+    vec3_t<T> v2;
 };
 
-struct alignas(16) BvhNode {
-    vec3 boundsMin;
-    vec3 boundsMax;
+template<typename T>
+struct alignas(16) BvhNode_t {
+    vec3_t<T> boundsMin;
+    vec3_t<T> boundsMax;
     int left;
     int right;
     int firstTri;
     int triCount;
 };
+
+// Type aliases
+using Triangle = Triangle_t<Real>;
+using BvhNode = BvhNode_t<Real>;
 
 struct bvhGpuData {
     Triangle* triangles = nullptr;

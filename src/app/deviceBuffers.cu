@@ -15,23 +15,25 @@ void allocateDeviceBuffers(deviceBuffers& buffers, int count) {
     // GPU-only buffers - use device memory (fast on both NVIDIA and AMD)
     checkCudaErrors(cudaMalloc(&buffers.hitPos, count * sizeof(vec3)));
     checkCudaErrors(cudaMalloc(&buffers.hitNormal, count * sizeof(vec3)));
-    checkCudaErrors(cudaMalloc(&buffers.hitDist, count * sizeof(float)));
+    checkCudaErrors(cudaMalloc(&buffers.lastDir, count * sizeof(vec3)));
+    checkCudaErrors(cudaMalloc(&buffers.hitDist, count * sizeof(Real)));
     checkCudaErrors(cudaMalloc(&buffers.hitFlag, count * sizeof(int)));
     checkCudaErrors(cudaMalloc(&buffers.hitCount, count * sizeof(int)));
     
     // Accumulator - device memory for atomic operations
-    checkCudaErrors(cudaMalloc(&buffers.accum, sizeof(cuFloatComplex)));
+    checkCudaErrors(cudaMalloc(&buffers.accum, sizeof(cuRealComplex)));
     
     // Allocate host buffer for hitCount stats (only used when showHitStats is true)
     checkCudaErrors(cudaMallocHost(&buffers.hitCountHost, count * sizeof(int)));
     
     // Host-side accumulator for reading results
-    checkCudaErrors(cudaMallocHost(&buffers.accumHost, sizeof(cuFloatComplex)));
+    checkCudaErrors(cudaMallocHost(&buffers.accumHost, sizeof(cuRealComplex)));
 }
 
 void freeDeviceBuffers(deviceBuffers& buffers) {
     checkCudaErrors(cudaFree(buffers.hitPos));
     checkCudaErrors(cudaFree(buffers.hitNormal));
+    checkCudaErrors(cudaFree(buffers.lastDir));
     checkCudaErrors(cudaFree(buffers.hitDist));
     checkCudaErrors(cudaFree(buffers.hitFlag));
     checkCudaErrors(cudaFree(buffers.hitCount));

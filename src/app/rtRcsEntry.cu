@@ -2,6 +2,7 @@
 
 #include "app/rtRcsEntry.hpp"
 
+#include <mpi.h>
 #include <fstream>
 #include <cstdint>
 #include <cctype>
@@ -57,18 +58,21 @@ bool resolveModelFileType(const std::string& path, modelLoader::FileType& outTyp
 
 int runRcsApp(int argc, char** argv) {
 
-    
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    std::cerr << "╔═══════════════════════════════════════════════════╗\n";
-    std::cerr << "║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║\n";
-    std::cerr << "╚═══════════════════════════════════════════════════╝\n";
+    if (rank == 0) {
+        std::cerr << "╔═══════════════════════════════════════════════════╗\n";
+        std::cerr << "║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║\n";
+        std::cerr << "╚═══════════════════════════════════════════════════╝\n";
+    }
 
     // ========== TIMING: Total application ==========
     clock_t appStartTime = clock();
 
     simulationConfig config = loadConfig("config.txt", argc, argv);
 
-    if (config.showInfoGPU) printGpuInfo();
+    if (config.showInfoGPU && rank == 0) printGpuInfo();
 
     int rayCount = config.nx * config.ny;
 
@@ -130,15 +134,15 @@ int runRcsApp(int argc, char** argv) {
         std::size_t v2 = i2 * 3;
 
         Triangle tri;
-        tri.v0 = vec3(mesh.positions[v0 + 0] * config.modelScale,
-                      mesh.positions[v0 + 1] * config.modelScale,
-                      mesh.positions[v0 + 2] * config.modelScale);
-        tri.v1 = vec3(mesh.positions[v1 + 0] * config.modelScale,
-                      mesh.positions[v1 + 1] * config.modelScale,
-                      mesh.positions[v1 + 2] * config.modelScale);
-        tri.v2 = vec3(mesh.positions[v2 + 0] * config.modelScale,
-                      mesh.positions[v2 + 1] * config.modelScale,
-                      mesh.positions[v2 + 2] * config.modelScale);
+        tri.v0 = vec3(static_cast<Real>(mesh.positions[v0 + 0]) * config.modelScale,
+                      static_cast<Real>(mesh.positions[v0 + 1]) * config.modelScale,
+                      static_cast<Real>(mesh.positions[v0 + 2]) * config.modelScale);
+        tri.v1 = vec3(static_cast<Real>(mesh.positions[v1 + 0]) * config.modelScale,
+                      static_cast<Real>(mesh.positions[v1 + 1]) * config.modelScale,
+                      static_cast<Real>(mesh.positions[v1 + 2]) * config.modelScale);
+        tri.v2 = vec3(static_cast<Real>(mesh.positions[v2 + 0]) * config.modelScale,
+                      static_cast<Real>(mesh.positions[v2 + 1]) * config.modelScale,
+                      static_cast<Real>(mesh.positions[v2 + 2]) * config.modelScale);
 
         triangles.push_back(tri);
     }
@@ -170,7 +174,7 @@ int runRcsApp(int argc, char** argv) {
     // ========== TIMING: Memory allocation ==========
     clock_t memAllocStart = clock();
 
-    printSeparator("MEMORY ALLOCATION");
+    if (rank == 0) printSeparator("MEMORY ALLOCATION");
     deviceBuffers buffers;
     allocateDeviceBuffers(buffers, rayCount);
 
@@ -194,46 +198,56 @@ int runRcsApp(int argc, char** argv) {
     clock_t memAllocEnd = clock();
     double memAllocTime = double(memAllocEnd - memAllocStart) / CLOCKS_PER_SEC;
 
-    std::cerr << "│  BVH buffers and world setup complete.\n";
-    printEndSeparator();
+    if (rank == 0) {
+        std::cerr << "│  BVH buffers and world setup complete.\n";
+        printEndSeparator();
+    }
 
     // ========== Print initialization timing ==========
-    printSeparator("INITIALIZATION TIMING");
-    printKv("Model Loading", modelLoadTime * 1000.0, "ms");
-    printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
-    printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
-    printKv("Total Init Time", (modelLoadTime + bvhBuildTime + memAllocTime) * 1000.0, "ms");
-    printKv("Triangle Count", static_cast<int>(triangleCount));
-    printKv("BVH Node Count", bvhData.nodeCount);
-    printEndSeparator();
+    if (rank == 0) {
+        printSeparator("INITIALIZATION TIMING");
+        printKv("Model Loading", modelLoadTime * 1000.0, "ms");
+        printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
+        printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
+        printKv("Total Init Time", (modelLoadTime + bvhBuildTime + memAllocTime) * 1000.0, "ms");
+        printKv("Triangle Count", static_cast<int>(triangleCount));
+        printKv("BVH Node Count", bvhData.nodeCount);
+        printEndSeparator();
+    }
 
-    // ========== TIMING: File open ==========
+    // ========== TIMING: File open (rank 0 only) ==========
     clock_t fileOpenStart = clock();
-    std::ofstream outFile("rcs_results.csv");
-    outFile << "# Frequency: " << config.freq << "\n# Grid: " << config.nx << "x" << config.ny << "\n";
-    outFile << "# GridSize: " << config.gridSize << "\n# ThetaSamples: " << config.thetaSamples << "\n";
-    outFile << "# PhiSamples: " << config.phiSamples << "\n" << "theta,phi,rcs_m2,rcs_dbsm\n";
+    std::ofstream outFile;
+    if (rank == 0) {
+        outFile.open("rcs_results.csv");
+        outFile << "# Frequency: " << config.freq << "\n# Grid: " << config.nx << "x" << config.ny << "\n";
+        outFile << "# GridSize: " << config.gridSize << "\n# ThetaSamples: " << config.thetaSamples << "\n";
+        outFile << "# PhiSamples: " << config.phiSamples << "\n" << "theta,phi,rcs_m2,rcs_dbsm\n";
+    }
     clock_t fileOpenEnd = clock();
     double fileOpenTime = double(fileOpenEnd - fileOpenStart) / CLOCKS_PER_SEC;
 
     // ========== Run sweep (with detailed timing inside) ==========
+    // Note: only rank 0 writes to outFile; other ranks pass an unopened stream
     sweepResults results = runSweep(config, buffers, bvhData, outFile);
 
     // ========== TIMING: File close ==========
     clock_t fileCloseStart = clock();
-    outFile.close();
+    if (rank == 0) outFile.close();
     clock_t fileCloseEnd = clock();
     double fileCloseTime = double(fileCloseEnd - fileCloseStart) / CLOCKS_PER_SEC;
 
     // ========== TIMING: Cleanup ==========
     clock_t cleanupStart = clock();
     
-    printSeparator("CLEANUP");
+    if (rank == 0) printSeparator("CLEANUP");
     freeDeviceBuffers(buffers);
     checkCudaErrors(cudaFree(bvhData.triangles));
     checkCudaErrors(cudaFree(bvhData.nodes));
-    std::cerr << "│  Device memory released. Success.\n";
-    printEndSeparator();
+    if (rank == 0) {
+        std::cerr << "│  Device memory released. Success.\n";
+        printEndSeparator();
+    }
     
     clock_t cleanupEnd = clock();
     double cleanupTime = double(cleanupEnd - cleanupStart) / CLOCKS_PER_SEC;
@@ -243,17 +257,19 @@ int runRcsApp(int argc, char** argv) {
     double totalAppTime = double(appEndTime - appStartTime) / CLOCKS_PER_SEC;
 
     // ========== Print final timing summary ==========
-    printSeparator("TOTAL TIMING BREAKDOWN");
-    printKv("Model Loading", modelLoadTime * 1000.0, "ms");
-    printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
-    printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
-    printKv("File Open/Header", fileOpenTime * 1000.0, "ms");
-    printKv("Sweep Execution", results.totalTimeSeconds * 1000.0, "ms");
-    printKv("File Close", fileCloseTime * 1000.0, "ms");
-    printKv("Cleanup", cleanupTime * 1000.0, "ms");
-    printKv("─────────────────", "");
-    printKv("Total App Time", totalAppTime * 1000.0, "ms");
-    printEndSeparator();
+    if (rank == 0) {
+        printSeparator("TOTAL TIMING BREAKDOWN");
+        printKv("Model Loading", modelLoadTime * 1000.0, "ms");
+        printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
+        printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
+        printKv("File Open/Header", fileOpenTime * 1000.0, "ms");
+        printKv("Sweep Execution", results.totalTimeSeconds * 1000.0, "ms");
+        printKv("File Close", fileCloseTime * 1000.0, "ms");
+        printKv("Cleanup", cleanupTime * 1000.0, "ms");
+        printKv("─────────────────", "");
+        printKv("Total App Time", totalAppTime * 1000.0, "ms");
+        printEndSeparator();
+    }
 
     return 0;
 }

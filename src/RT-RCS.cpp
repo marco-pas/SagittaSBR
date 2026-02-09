@@ -20,11 +20,12 @@ int main(int argc, char** argv) {
     nvtxRangePushA("runRcsApp");
 #endif
 
-    return runRcsApp(argc, argv);
+    int rc = runRcsApp(argc, argv);
 
 #ifndef USE_HIP
     nvtxRangePop();
 #endif
 
     MPI_Finalize();
+    return rc;
 }

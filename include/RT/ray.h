@@ -4,29 +4,24 @@
 
 // only device functions here
 
-class ray
+template<typename T>
+class ray_t
 {
     public:
-        __device__ ray() {}
-        __device__ ray(const vec3& origin, const vec3& direction) {
+        __device__ ray_t() {}
+        __device__ ray_t(const vec3_t<T>& origin, const vec3_t<T>& direction) {
             originValue = origin;
             directionValue = direction;
         }
-        __device__ vec3 origin() const       { return originValue; } // @@ this has to be updated after the hit
-        __device__ vec3 direction() const    { return directionValue; } // @@ this has to be updated after every hit
-        __device__ vec3 pointAtParameter(float t) const { return originValue + t * directionValue; }
-        // __device__ float distance() const;
+        __device__ vec3_t<T> origin() const       { return originValue; }
+        __device__ vec3_t<T> direction() const    { return directionValue; }
+        __device__ vec3_t<T> pointAtParameter(T t) const { return originValue + t * directionValue; }
 
-        /*
-        __device__ float distTravelled() const    { return t; }
-        __device__ float rayArea() const  { return area; }
-        __device__ int hitCount() const { return hits; }
-        __device__ float rayPolariz() const { return polariz; }
-
-        */
-
-        vec3 originValue;
-        vec3 directionValue;
+        vec3_t<T> originValue;
+        vec3_t<T> directionValue;
 };
+
+// Type alias - follows precision from vec3.h / precision.h
+using ray = ray_t<Real>;
 
 #endif

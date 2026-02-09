@@ -12,9 +12,9 @@
 // - GPU_SHFL_DOWN: Platform-specific shuffle intrinsic
 // - GPU_MAX_WARPS_PER_BLOCK: 4 (AMD) or 8 (NVIDIA)
 
-// Warp-level reduction for float
+// Warp-level reduction for Real
 // Uses GPU_SHFL_DOWN from gpuConfig.cuh for platform-specific shuffle
-__device__ __forceinline__ float warpReduceSum(float val) {
+__device__ __forceinline__ Real warpReduceSum(Real val) {
 #if GPU_WARP_SIZE == 64
     // AMD: wavefront size 64 - need extra reduction step
     val += GPU_SHFL_DOWN(val, 32);
@@ -30,8 +30,8 @@ __device__ __forceinline__ float warpReduceSum(float val) {
 
 // Block-level reduction using shared memory
 // Uses GPU_MAX_WARPS_PER_BLOCK and GPU_WARP_SIZE from gpuConfig.cuh
-__device__ __forceinline__ float blockReduceSum(float val) {
-    __shared__ float shared[GPU_MAX_WARPS_PER_BLOCK];
+__device__ __forceinline__ Real blockReduceSum(Real val) {
+    __shared__ Real shared[GPU_MAX_WARPS_PER_BLOCK];
     
     unsigned int lane = threadIdx.x % GPU_WARP_SIZE;
     unsigned int warpId = threadIdx.x / GPU_WARP_SIZE;
@@ -49,7 +49,7 @@ __device__ __forceinline__ float blockReduceSum(float val) {
     
     // First warp reduces the partial sums
     // Only read if this warp slot was actually used
-    val = (threadIdx.x < numWarps) ? shared[threadIdx.x] : 0.0f;
+    val = (threadIdx.x < numWarps) ? shared[threadIdx.x] : REAL_CONST(0.0);
     
     if (warpId == 0) {
         val = warpReduceSum(val);
@@ -58,29 +58,29 @@ __device__ __forceinline__ float blockReduceSum(float val) {
     return val;
 }
 
-__global__ void integratePo(vec3* /* hitPos */, vec3* hitNormal, float* hitDist,
-                            int* hitFlag, int n, float k, vec3 kInc,
-                            float rayArea, cuFloatComplex* accum) {
+__global__ void integratePo(vec3* /* hitPos */, vec3* hitNormal, Real* hitDist,
+                            int* hitFlag, int n, Real k, vec3 kInc,
+                            Real rayArea, cuRealComplex* accum) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    float localReal = 0.0f;
-    float localImag = 0.0f;
+    Real localReal = REAL_CONST(0.0);
+    Real localImag = REAL_CONST(0.0);
 
     if (idx < n && hitFlag[idx]) {
-        float cosTheta = dot(hitNormal[idx], -kInc);
-        if (cosTheta > 0.0f) {
-            float phase = 2.0f * k * hitDist[idx];
-            float mag = (k * rayArea / (4.0f * M_PI)) * 2.0f;
-            float sinPhase, cosPhase;
-            sincosf(phase, &sinPhase, &cosPhase);
+        Real cosTheta = dot(hitNormal[idx], -kInc);
+        if (cosTheta > REAL_CONST(0.0)) {
+            Real phase = REAL_CONST(2.0) * k * hitDist[idx];
+            Real mag = (k * rayArea / (REAL_CONST(4.0) * Real(M_PI))) * REAL_CONST(2.0);
+            Real sinPhase, cosPhase;
+            devSinCos(phase, &sinPhase, &cosPhase);
             localReal = -mag * sinPhase;
             localImag = mag * cosPhase;
         }
     }
 
     // Block-level reduction
-    float blockSumReal = blockReduceSum(localReal);
-    float blockSumImag = blockReduceSum(localImag);
+    Real blockSumReal = blockReduceSum(localReal);
+    Real blockSumImag = blockReduceSum(localImag);
 
     // Only thread 0 does the atomicAdd (one per block instead of one per thread)
     if (threadIdx.x == 0) {
@@ -92,34 +92,40 @@ __global__ void integratePo(vec3* /* hitPos */, vec3* hitNormal, float* hitDist,
 __global__ void integratePoMultiBounce(
     const vec3* __restrict__ /* hitPos */,
     const vec3* __restrict__ hitNormal,
-    const float* __restrict__ hitDist,
+    const vec3* __restrict__ lastDir,
+    const Real* __restrict__ hitDist,
     const int* __restrict__ hitCount,
-    int n, float k, vec3 kInc, float rayArea,
-    cuFloatComplex* __restrict__ accum,
-    float reflectionConst) {
+    int n, Real k, vec3 kInc, Real rayArea,
+    cuRealComplex* __restrict__ accum,
+    Real reflectionConst) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     // Each thread computes its local contribution
-    float localReal = 0.0f;
-    float localImag = 0.0f;
+    Real localReal = REAL_CONST(0.0);
+    Real localImag = REAL_CONST(0.0);
 
     if (idx < n && hitCount[idx] > 0) {
-        float totalReflCoeff = powf(reflectionConst, static_cast<float>(hitCount[idx]));
-        float cosTheta = dot(hitNormal[idx], -kInc);
-        
-        if (cosTheta > 0.0f) {
-            float phase = 2.0f * k * hitDist[idx];
-            phase = fmodf(phase, 2.0f * M_PI);
+        Real totalReflCoeff = devPow(reflectionConst, static_cast<Real>(hitCount[idx]));
 
-            float mag = (k * rayArea / (4.0f * M_PI))
-                    * 2.0f
+        // Use the last-bounce incoming ray direction for the obliquity factor.
+        // For single-bounce rays, lastDir == kInc so this is equivalent.
+        // For multi-bounce rays, lastDir is the direction arriving at the
+        // exit surface after all prior reflections.
+        Real cosTheta = dot(hitNormal[idx], -lastDir[idx]);
+        
+        if (cosTheta > REAL_CONST(0.0)) {
+            Real phase = REAL_CONST(2.0) * k * hitDist[idx];
+            phase = devFmod(phase, REAL_CONST(2.0) * Real(M_PI));
+
+            Real mag = (k * rayArea / (REAL_CONST(4.0) * Real(M_PI)))
+                    * REAL_CONST(2.0)
                     * cosTheta
                     * totalReflCoeff;
 
-            // Use sincosf for efficiency
-            float sinPhase, cosPhase;
-            sincosf(phase, &sinPhase, &cosPhase);
+            // Use devSinCos for efficiency
+            Real sinPhase, cosPhase;
+            devSinCos(phase, &sinPhase, &cosPhase);
             
             localReal = -mag * sinPhase;
             localImag = mag * cosPhase;
@@ -127,8 +133,8 @@ __global__ void integratePoMultiBounce(
     }
 
     // Block-level reduction using shared memory and warp shuffles
-    float blockSumReal = blockReduceSum(localReal);
-    float blockSumImag = blockReduceSum(localImag);
+    Real blockSumReal = blockReduceSum(localReal);
+    Real blockSumImag = blockReduceSum(localImag);
 
     // Only thread 0 of each block does atomicAdd to global memory
     // This reduces atomic contention from N threads to N/blockSize blocks

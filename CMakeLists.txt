@@ -12,6 +12,9 @@ endif()
 # Option to enable HIP (AMD GPU) instead of CUDA (NVIDIA GPU)
 option(USE_HIP "Build with HIP for AMD GPUs instead of CUDA" OFF)
 
+# Option to enable double precision floating point
+option(USE_DOUBLE "Use double precision (64-bit) instead of single precision (32-bit)" OFF)
+
 
 project(RT-RCS
     VERSION 0.1.0
@@ -76,6 +79,14 @@ if(USE_HIP)
     )
 endif()
 
+# Add double precision compile definition
+if(USE_DOUBLE)
+    target_compile_definitions(projectOptions INTERFACE USE_DOUBLE)
+    message(STATUS "Building with DOUBLE precision (64-bit)")
+else()
+    message(STATUS "Building with SINGLE precision (32-bit)")
+endif()
+
 target_compile_features(projectOptions
     INTERFACE
         cxx_std_23
@@ -99,10 +110,18 @@ if(USE_HIP)
             $<$<COMPILE_LANGUAGE:HIP>:-O3 -ffast-math>
     )
 else()
-    target_compile_options(projectOptions
-        INTERFACE
-            $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
-    )
+    if(USE_DOUBLE)
+        # --use_fast_math is unsafe for double precision
+        target_compile_options(projectOptions
+            INTERFACE
+                $<$<COMPILE_LANGUAGE:CUDA>:-O3>
+        )
+    else()
+        target_compile_options(projectOptions
+            INTERFACE
+                $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>
+        )
+    endif()
 endif()
 
 # Warning flags (separate from optimization)

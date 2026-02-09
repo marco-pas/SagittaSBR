@@ -2,26 +2,27 @@
 #define APP_CONFIG_HPP
 
 #include <string>
+#include "RT/precision.h"
 
 struct simulationConfig {
-    float phiStart = 0.0f;
-    float phiEnd = 180.0f;
+    Real phiStart = REAL_CONST(0.0);
+    Real phiEnd = REAL_CONST(180.0);
     int phiSamples = 181;
-    float thetaStart = 90.0f;
-    float thetaEnd = 90.0f;
+    Real thetaStart = REAL_CONST(90.0);
+    Real thetaEnd = REAL_CONST(90.0);
     int thetaSamples = 1;
-    float gridSize = 3.0f;
+    Real gridSize = REAL_CONST(3.0);
     int nx = 400;
     int ny = 400;
     int tpbx = 16;
     int tpby = 16;
     int maxBounces = 20;
-    float reflectionConst = 1.0f;
-    float freq = 10.0e9f;
+    Real reflectionConst = REAL_CONST(1.0);
+    Real freq = REAL_CONST(10.0e9);
     bool showInfoGPU = true;
     bool showHitStats = true;
     std::string modelPath;
-    float modelScale = 1.0f;
+    Real modelScale = REAL_CONST(1.0);
 
 };
 

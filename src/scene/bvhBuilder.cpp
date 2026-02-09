@@ -40,15 +40,15 @@ vec3 triangleMax(const Triangle& tri) {
 }
 
 vec3 triangleCentroid(const Triangle& tri) {
-    return (tri.v0 + tri.v1 + tri.v2) / 3.0f;
+    return (tri.v0 + tri.v1 + tri.v2) / Real(3.0);
 }
 
-float surfaceArea(const vec3& minV, const vec3& maxV) {
+Real surfaceArea(const vec3& minV, const vec3& maxV) {
     vec3 d = maxV - minV;
-    float dx = std::fmax(0.0f, d.x());
-    float dy = std::fmax(0.0f, d.y());
-    float dz = std::fmax(0.0f, d.z());
-    return 2.0f * (dx * dy + dy * dz + dz * dx);
+    Real dx = std::fmax(Real(0.0), d.x());
+    Real dy = std::fmax(Real(0.0), d.y());
+    Real dz = std::fmax(Real(0.0), d.z());
+    return Real(2.0) * (dx * dy + dy * dz + dz * dx);
 }
 
 int maxAxis(const vec3& v) {
@@ -63,8 +63,8 @@ int maxAxis(const vec3& v) {
 
 void computeBounds(const std::vector<Triangle>& triangles, int start, int end,
                    vec3& outMin, vec3& outMax) {
-    vec3 boundsMin(FLT_MAX, FLT_MAX, FLT_MAX);
-    vec3 boundsMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+    vec3 boundsMin(Real(REAL_FLT_MAX), Real(REAL_FLT_MAX), Real(REAL_FLT_MAX));
+    vec3 boundsMax(Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX));
 
     for (int i = start; i < end; ++i) {
         boundsMin = minVec3(boundsMin, triangleMin(triangles[i]));
@@ -77,8 +77,8 @@ void computeBounds(const std::vector<Triangle>& triangles, int start, int end,
 
 void computeCentroidBounds(const std::vector<Triangle>& triangles, int start, int end,
                            vec3& outMin, vec3& outMax) {
-    vec3 boundsMin(FLT_MAX, FLT_MAX, FLT_MAX);
-    vec3 boundsMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+    vec3 boundsMin(Real(REAL_FLT_MAX), Real(REAL_FLT_MAX), Real(REAL_FLT_MAX));
+    vec3 boundsMax(Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX));
 
     for (int i = start; i < end; ++i) {
         vec3 c = triangleCentroid(triangles[i]);
@@ -115,8 +115,8 @@ bool partitionSimple(std::vector<Triangle>& triangles, int start, int end, int& 
 bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binCount,
                   const vec3& boundsMin, const vec3& boundsMax, int& mid) {
     struct Bin {
-        vec3 boundsMin = vec3(FLT_MAX, FLT_MAX, FLT_MAX);
-        vec3 boundsMax = vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        vec3 boundsMin = vec3(Real(REAL_FLT_MAX), Real(REAL_FLT_MAX), Real(REAL_FLT_MAX));
+        vec3 boundsMax = vec3(Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX));
         int count = 0;
     };
 
@@ -126,18 +126,18 @@ bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binC
     computeCentroidBounds(triangles, start, end, centroidMin, centroidMax);
 
     vec3 centroidExtent = centroidMax - centroidMin;
-    float parentArea = surfaceArea(boundsMin, boundsMax);
-    if (parentArea <= 0.0f) {
+    Real parentArea = surfaceArea(boundsMin, boundsMax);
+    if (parentArea <= Real(0.0)) {
         return false;
     }
 
     int bestAxis = -1;
     int bestSplit = -1;
-    float bestCost = FLT_MAX;
+    Real bestCost = Real(REAL_FLT_MAX);
 
     for (int axis = 0; axis < 3; ++axis) {
-        float extent = centroidExtent[axis];
-        if (extent <= 1.0e-6f) {
+        Real extent = centroidExtent[axis];
+        if (extent <= Real(1.0e-6)) {
             continue;
         }
 
@@ -145,7 +145,7 @@ bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binC
 
         for (int i = start; i < end; ++i) {
             vec3 c = triangleCentroid(triangles[i]);
-            float offset = (c[axis] - centroidMin[axis]) / extent;
+            Real offset = (c[axis] - centroidMin[axis]) / extent;
             int binIndex = static_cast<int>(offset * binCount);
             if (binIndex < 0) {
                 binIndex = 0;
@@ -167,8 +167,8 @@ bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binC
         std::vector<vec3> rightMax(static_cast<std::size_t>(binCount));
         std::vector<int> rightCount(static_cast<std::size_t>(binCount));
 
-        vec3 runningMin(FLT_MAX, FLT_MAX, FLT_MAX);
-        vec3 runningMax(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        vec3 runningMin(Real(REAL_FLT_MAX), Real(REAL_FLT_MAX), Real(REAL_FLT_MAX));
+        vec3 runningMax(Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX));
         int runningCount = 0;
         for (int i = 0; i < binCount; ++i) {
             if (bins[i].count > 0) {
@@ -181,8 +181,8 @@ bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binC
             leftCount[i] = runningCount;
         }
 
-        runningMin = vec3(FLT_MAX, FLT_MAX, FLT_MAX);
-        runningMax = vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        runningMin = vec3(Real(REAL_FLT_MAX), Real(REAL_FLT_MAX), Real(REAL_FLT_MAX));
+        runningMax = vec3(Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX), Real(-REAL_FLT_MAX));
         runningCount = 0;
         for (int i = binCount - 1; i >= 0; --i) {
             if (bins[i].count > 0) {
@@ -202,9 +202,9 @@ bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binC
                 continue;
             }
 
-            float leftArea = surfaceArea(leftMin[i], leftMax[i]);
-            float rightArea = surfaceArea(rightMin[i + 1], rightMax[i + 1]);
-            float cost = (leftArea * leftNum + rightArea * rightNum) / parentArea;
+            Real leftArea = surfaceArea(leftMin[i], leftMax[i]);
+            Real rightArea = surfaceArea(rightMin[i + 1], rightMax[i + 1]);
+            Real cost = (leftArea * leftNum + rightArea * rightNum) / parentArea;
 
             if (cost < bestCost) {
                 bestCost = cost;
@@ -218,17 +218,17 @@ bool partitionSah(std::vector<Triangle>& triangles, int start, int end, int binC
         return false;
     }
 
-    if (bestCost >= static_cast<float>(triCount)) {
+    if (bestCost >= static_cast<Real>(triCount)) {
         return false;
     }
 
-    float extent = centroidExtent[bestAxis];
-    if (extent <= 1.0e-6f) {
+    Real extent = centroidExtent[bestAxis];
+    if (extent <= Real(1.0e-6)) {
         return false;
     }
 
-    float splitPos = centroidMin[bestAxis] + extent * (static_cast<float>(bestSplit + 1) /
-                                                      static_cast<float>(binCount));
+    Real splitPos = centroidMin[bestAxis] + extent * (static_cast<Real>(bestSplit + 1) /
+                                                      static_cast<Real>(binCount));
 
     auto midIter = std::partition(
         triangles.begin() + start,

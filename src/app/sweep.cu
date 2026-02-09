@@ -26,10 +26,10 @@
 // Structure to hold results from each iteration
 struct IterationResult {
     int globalIdx;
-    float thetaDeg;
-    float phiDeg;
-    float sigma;
-    float rcsDbsm;
+    Real thetaDeg;
+    Real phiDeg;
+    Real sigma;
+    Real rcsDbsm;
 };
 
 sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
@@ -47,12 +47,12 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 #endif
     
     // Physical params
-    const float c0 = 299792458.0f;
-    const float lambda = c0 / config.freq;
-    const float k = 2.0f * M_PI / lambda;
-    const float rayArea = (config.gridSize * config.gridSize) / (config.nx * config.ny);
+    const Real c0 = REAL_CONST(299792458.0);
+    const Real lambda = c0 / config.freq;
+    const Real k = REAL_CONST(2.0) * Real(M_PI) / lambda;
+    const Real rayArea = (config.gridSize * config.gridSize) / (config.nx * config.ny);
     const int nRays = config.nx * config.ny;
-    const float distanceOffset = 10.0f * config.gridSize;
+    const Real distanceOffset = REAL_CONST(10.0) * config.gridSize;
 
     // Print simulation parameters (rank 0 only)
     if (rank == 0) {
@@ -73,18 +73,18 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         printEndSeparator();
 
         // Physics validation
-        float raySpacing = std::sqrt(rayArea);
-        float samplingRatio = raySpacing / lambda;
+        Real raySpacing = realSqrt(rayArea);
+        Real samplingRatio = raySpacing / lambda;
 
-        if (samplingRatio > 0.2f) {
+        if (samplingRatio > REAL_CONST(0.2)) {
             printSeparator("WARNING");
             std::cerr << "│ Physics is under-resolved at your frequency!\n";
             printKv("Ray spacing / λ", samplingRatio, " (< 0.1 needed)");
-            printKv("Undersampled by", samplingRatio / 0.1f, "times");
+            printKv("Undersampled by", samplingRatio / REAL_CONST(0.1), "times");
             
             std::cerr << "│\n│ Solutions: \n";
-            printKv("  a. Increase n_x, n_y by factor", std::sqrt(samplingRatio / 0.1f));
-            printKv("  b. Reduce frequency below", (config.freq * 0.1f / samplingRatio) / 1e9, "GHz");
+            printKv("  a. Increase n_x, n_y by factor", realSqrt(samplingRatio / REAL_CONST(0.1)));
+            printKv("  b. Reduce frequency below", (config.freq * REAL_CONST(0.1) / samplingRatio) / REAL_CONST(1e9), "GHz");
             std::cerr << "│   c. Reduce illumination area (if possible)\n";
             printEndSeparator();
         }
@@ -150,43 +150,44 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         const int p = globalIdx % config.phiSamples;
 
         // Calculate theta and phi values
-        float thetaDeg = config.thetaStart + (config.thetaSamples > 1
+        Real thetaDeg = config.thetaStart + (config.thetaSamples > 1
             ? t * (config.thetaEnd - config.thetaStart) / (config.thetaSamples - 1)
             : 0);
-        float thetaRad = thetaDeg * M_PI / 180.0f;
+        Real thetaRad = thetaDeg * Real(M_PI) / REAL_CONST(180.0);
 
-        float phiDeg = config.phiStart + (config.phiSamples > 1
+        Real phiDeg = config.phiStart + (config.phiSamples > 1
             ? p * (config.phiEnd - config.phiStart) / (config.phiSamples - 1)
             : 0);
-        float phiRad = phiDeg * M_PI / 180.0f;
+        Real phiRad = phiDeg * Real(M_PI) / REAL_CONST(180.0);
 
         // Calculate ray direction and basis vectors
         vec3 dir(
-            sinf(thetaRad) * cosf(phiRad), 
-            sinf(thetaRad) * sinf(phiRad), 
-            cosf(thetaRad)
+            realSin(thetaRad) * realCos(phiRad), 
+            realSin(thetaRad) * realSin(phiRad), 
+            realCos(thetaRad)
         );
 
         vec3 rayDir = -dir;
 
         vec3 up(0, 1, 0);
-        if (fabsf(dir.y()) > 0.99f) {
+        if (realAbs(dir.y()) > REAL_CONST(0.99)) {
             up = vec3(1, 0, 0);
         }
 
         vec3 uVec = unitVector(cross(up, dir)) * config.gridSize;
         vec3 vVec = unitVector(cross(dir, uVec)) * config.gridSize;
-        vec3 llc = (dir * distanceOffset) - 0.5f * uVec - 0.5f * vVec;
+        vec3 llc = (dir * distanceOffset) - REAL_CONST(0.5) * uVec - REAL_CONST(0.5) * vVec;
 
         // ========== TIMING: Memset ==========
         checkCudaErrors(cudaEventRecord(memsetStart));
-        checkCudaErrors(cudaMemset(buffers.accum, 0, sizeof(cuFloatComplex)));
+        checkCudaErrors(cudaMemset(buffers.accum, 0, sizeof(cuRealComplex)));
         checkCudaErrors(cudaEventRecord(memsetStop));
 
         // ========== TIMING: Ray tracing kernel ==========
         checkCudaErrors(cudaEventRecord(rtKernelStart));
         launchRaysMultiBounce<<<rtBlocks, rtThreads>>>(
-            buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
+            buffers.hitPos, buffers.hitNormal, buffers.lastDir,
+            buffers.hitDist, buffers.hitCount,
             config.nx, config.ny, llc, uVec, vVec, rayDir,
             bvhData.triangles, bvhData.nodes, bvhData.rootIndex,
             config.maxBounces);
@@ -195,14 +196,15 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         // ========== TIMING: PO integration kernel ==========
         checkCudaErrors(cudaEventRecord(poKernelStart));
         integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_PO_BLOCK_SIZE), GPU_PO_BLOCK_SIZE>>>(
-            buffers.hitPos, buffers.hitNormal, buffers.hitDist, buffers.hitCount,
+            buffers.hitPos, buffers.hitNormal, buffers.lastDir,
+            buffers.hitDist, buffers.hitCount,
             nRays, k, rayDir, rayArea, buffers.accum, config.reflectionConst);
         checkCudaErrors(cudaEventRecord(poKernelStop));
 
         // ========== TIMING: Device to host memcpy ==========
         checkCudaErrors(cudaEventRecord(memcpyStart));
         checkCudaErrors(cudaMemcpy(buffers.accumHost, buffers.accum, 
-                                   sizeof(cuFloatComplex), cudaMemcpyDeviceToHost));
+                                   sizeof(cuRealComplex), cudaMemcpyDeviceToHost));
         checkCudaErrors(cudaEventRecord(memcpyStop));
         checkCudaErrors(cudaEventSynchronize(memcpyStop));
 
@@ -219,9 +221,9 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         totalMemcpyMs += memcpyMs;
 
         // Calculate RCS
-        float sigma = 4.0f * M_PI * (buffers.accumHost->x * buffers.accumHost->x
+        Real sigma = REAL_CONST(4.0) * Real(M_PI) * (buffers.accumHost->x * buffers.accumHost->x
                      + buffers.accumHost->y * buffers.accumHost->y);
-        float rcsDbsm = 10.0f * log10f(fmaxf(sigma, 1e-10f));
+        Real rcsDbsm = REAL_CONST(10.0) * realLog10(realFmax(sigma, REAL_CONST(1e-10)));
 
         // Store result
         localResults.push_back({globalIdx, thetaDeg, phiDeg, sigma, rcsDbsm});
@@ -255,7 +257,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             double statsMs = double(statsEnd - statsStart) / CLOCKS_PER_SEC * 1000.0;
             totalStatsMs += statsMs;
 
-            float avgHits = (nonZeroCount > 0) ? static_cast<float>(sumHits) / nonZeroCount : 0.0f;
+            Real avgHits = (nonZeroCount > 0) ? static_cast<Real>(sumHits) / nonZeroCount : REAL_CONST(0.0);
 
             std::cerr << "[R" << rank << ":" << std::setw(3) << globalIdx + 1 << "/"
                 << totalIterations << "]"
@@ -307,8 +309,8 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
     // Prepare data for gathering (convert struct to arrays)
     std::vector<int> localGlobalIdx(localCount);
-    std::vector<float> localTheta(localCount), localPhi(localCount);
-    std::vector<float> localSigma(localCount), localRcs(localCount);
+    std::vector<Real> localTheta(localCount), localPhi(localCount);
+    std::vector<Real> localSigma(localCount), localRcs(localCount);
     
     for (int i = 0; i < localCount; ++i) {
         localGlobalIdx[i] = localResults[i].globalIdx;
@@ -319,7 +321,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     }
 
     std::vector<int> allGlobalIdx;
-    std::vector<float> allTheta, allPhi, allSigma, allRcs;
+    std::vector<Real> allTheta, allPhi, allSigma, allRcs;
     
     if (rank == 0) {
         allGlobalIdx.resize(totalIterations);
@@ -332,17 +334,17 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     MPI_Gatherv(localGlobalIdx.data(), localCount, MPI_INT,
                 allGlobalIdx.data(), recvCounts.data(), displs.data(), MPI_INT,
                 0, MPI_COMM_WORLD);
-    MPI_Gatherv(localTheta.data(), localCount, MPI_FLOAT,
-                allTheta.data(), recvCounts.data(), displs.data(), MPI_FLOAT,
+    MPI_Gatherv(localTheta.data(), localCount, REAL_MPI_TYPE,
+                allTheta.data(), recvCounts.data(), displs.data(), REAL_MPI_TYPE,
                 0, MPI_COMM_WORLD);
-    MPI_Gatherv(localPhi.data(), localCount, MPI_FLOAT,
-                allPhi.data(), recvCounts.data(), displs.data(), MPI_FLOAT,
+    MPI_Gatherv(localPhi.data(), localCount, REAL_MPI_TYPE,
+                allPhi.data(), recvCounts.data(), displs.data(), REAL_MPI_TYPE,
                 0, MPI_COMM_WORLD);
-    MPI_Gatherv(localSigma.data(), localCount, MPI_FLOAT,
-                allSigma.data(), recvCounts.data(), displs.data(), MPI_FLOAT,
+    MPI_Gatherv(localSigma.data(), localCount, REAL_MPI_TYPE,
+                allSigma.data(), recvCounts.data(), displs.data(), REAL_MPI_TYPE,
                 0, MPI_COMM_WORLD);
-    MPI_Gatherv(localRcs.data(), localCount, MPI_FLOAT,
-                allRcs.data(), recvCounts.data(), displs.data(), MPI_FLOAT,
+    MPI_Gatherv(localRcs.data(), localCount, REAL_MPI_TYPE,
+                allRcs.data(), recvCounts.data(), displs.data(), REAL_MPI_TYPE,
                 0, MPI_COMM_WORLD);
 
     // Gather timing statistics

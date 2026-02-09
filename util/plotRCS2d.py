@@ -90,7 +90,7 @@ def get_next_filename(base_path, filename_base, extension):
 
 # Load metadata
 
-folder_csv = "."
+folder_csv = "/home/pennati/phd/raytracingSBR/runs/test2"
 
 file_csv = folder_csv + "/rcs_results.csv"
 
