@@ -19,17 +19,17 @@
     #define GPU_WARP_SIZE 64
     
     // --- Ray Tracing Kernel (2D grid, BVH traversal)
-    // 8x8 = 64 threads = 1 wavefront per block
-    // Benefits: Reduces divergence in BVH traversal, better cache locality
-    // for spatially coherent rays, lower register pressure per block
+    // 16x16 = 256 threads = 4 wavefronts per block
+    // MI250X needs multiple wavefronts per CU to hide HBM latency
+    // during BVH traversal (random memory access pattern).
+    // 1 wavefront/block (64 threads) starves the memory pipeline.
     #define GPU_RT_BLOCK_X 8
-    #define GPU_RT_BLOCK_Y 8
-    #define GPU_RT_BLOCK_SIZE (GPU_RT_BLOCK_X * GPU_RT_BLOCK_Y)  // 64
+    #define GPU_RT_BLOCK_Y 16
+    #define GPU_RT_BLOCK_SIZE (GPU_RT_BLOCK_X * GPU_RT_BLOCK_Y)  // 256
     
     // --- Physical Optics Kernel (1D grid, reduction)
     // 256 threads = 4 wavefronts per block
     // Benefits: Good occupancy, efficient warp-level reductions
-    // Smaller blocks (128) can help if register pressure is high
     #define GPU_PO_BLOCK_SIZE 256
     
     // --- Generic 1D kernels

@@ -103,20 +103,45 @@ target_compile_options(projectOptions
         $<$<CONFIG:Debug>:-O0 -g>
 )
 
+# ============================================================================
 # GPU-specific optimization flags
+# ============================================================================
+#
+# The AABB slab test computes 1.0/direction → ±Inf for axis-aligned rays.
+# IEEE 754 guarantees fmin(Inf,x)=x and fmax(-Inf,x)=x, which the BVH
+# traversal relies on for correctness.
+#
+# SAFE flags (no physics impact):
+#   -ffp-contract=fast    FMA fusion — more accurate, never less
+#   -fno-signed-zeros     Treats +0 == -0 (irrelevant for ray tracing)
+#   -fno-trapping-math    No FP traps (we never trap)
+#   -munsafe-fp-atomics   HW FP atomics on gfx90a instead of CAS loop
+
 if(USE_HIP)
+    # HIP (AMD) — same safe flags for both FP32 and FP64
+    # MI250X has 1:1 FP64:FP32 throughput, so no need to differentiate
+    # compute-related flags. Only memory bandwidth matters.
     target_compile_options(projectOptions
         INTERFACE
-            $<$<COMPILE_LANGUAGE:HIP>:-O3 -ffast-math>
+            $<$<COMPILE_LANGUAGE:HIP>:
+                -O3
+                -ffp-contract=fast
+                -fno-signed-zeros
+                -fno-trapping-math
+                -munsafe-fp-atomics
+            >
     )
 else()
+    # CUDA (NVIDIA)
     if(USE_DOUBLE)
-        # --use_fast_math is unsafe for double precision
         target_compile_options(projectOptions
             INTERFACE
-                $<$<COMPILE_LANGUAGE:CUDA>:-O3>
+                $<$<COMPILE_LANGUAGE:CUDA>:-O3 --fmad=true>
         )
     else()
+        # --use_fast_math on NVIDIA enables HW intrinsics (__fminf/__fmaxf)
+        # that handle Inf correctly at the hardware level regardless of
+        # the compiler flag, so it is safe for FP32 on NVIDIA.
         target_compile_options(projectOptions
             INTERFACE
                 $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math>

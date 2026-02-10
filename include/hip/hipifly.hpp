@@ -92,9 +92,10 @@
 #define __any_sync(mask, predicate) __any(predicate)
 #define __all_sync(mask, predicate) __all(predicate)
 #define __activemask() __ballot(1)
-// AMD wavefronts execute in lockstep, so __syncwarp is effectively a no-op
-// However, for memory visibility we should use __threadfence_block()
-#define __syncwarp(mask) __threadfence_block()
+// AMD wavefronts execute in lockstep, so __syncwarp is a no-op.
+// __threadfence_block() is NOT equivalent — it's a memory barrier that
+// stalls the pipeline. Use a true no-op instead.
+#define __syncwarp(mask) ((void)0)
 
 // Complex number types
 #define cuFloatComplex hipFloatComplex
