@@ -10,11 +10,11 @@
 
 
 phi_start 0              # [deg], starting phi angle
-phi_end 180              # [deg], final phi angle
-phi_samples 10           # number of samples in phi
+phi_end 360              # [deg], final phi angle
+phi_samples 30           # number of samples in phi
 theta_start 0            # [deg], starting theta angle
-theta_end 360            # [deg], final theta angle
-theta_samples 10         # number of samples in theta
+theta_end 180            # [deg], final theta angle
+theta_samples 20         # number of samples in theta
 freq 1e10                # [Hz], freq of the waves
 grid_size 100            # [m], width W and length L for our launcher (it is a square), this has a distance "distance_offset = 10.0f * grid_size" from the center
 n_x 20000                # points in x

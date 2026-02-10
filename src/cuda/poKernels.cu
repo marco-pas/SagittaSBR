@@ -61,7 +61,7 @@ __device__ __forceinline__ Real blockReduceSum(Real val) {
     return val;
 }
 
-// Physical Optics Integral
+// @@ Physical Optics Integral
 
 __global__ void integratePoMultiBounce(
     const vec3* __restrict__ hitNormal,

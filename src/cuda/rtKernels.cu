@@ -100,7 +100,7 @@ __device__ bool hitBvh(const Triangle* triangles, const BvhNode* nodes, int root
 }
 }
 
-// Ray Launching Kernel
+// @@ Ray Launching Kernel
 
 __global__ void launchRaysMultiBounce(vec3* hitNormal,
                                       vec3* lastDir,

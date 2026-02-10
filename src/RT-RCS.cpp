@@ -1,4 +1,4 @@
-// Starting point
+// -------------- Starting point -------------- //
 
 #include "app/rtRcsEntry.hpp"
 
@@ -29,3 +29,5 @@ int main(int argc, char** argv) {
     MPI_Finalize();                                 // MPI finalize
     return rc;
 }
+
+// -------------------------------------------- //

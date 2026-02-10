@@ -1,15 +1,15 @@
-"""
-Plot 2D Radar Cross Section (RCS) results from output/rcs_results.csv.
+# Plot 2D Radar Cross Section (RCS) results from output/rcs_results.csv
 
+"""
 Command-line options:
   --unit   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
   --plot   : Enable or disable plot saving/display (True/False), default True
   --scans  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
-  python3 util/plotRCS_2D.py
-  python3 util/plotRCS_2D.py --unit=m2
-  python3 util/plotRCS_2D.py --plot=False --scans=True --unit=m2
+  python3 util/plotRCS2d.py
+  python3 util/plotRCS2d.py --unit=m2
+  python3 util/plotRCS2d.py --plot=False --scans=True --unit=m2
 """
 
 import pandas as pd
@@ -19,6 +19,14 @@ import os
 import argparse
 import csv
 
+# Specify the .csv file location
+folder_csv = "."
+file_csv = folder_csv + "/rcs_results.csv"
+
+# Specify the saving location
+folder_save = "figures" # creates a new folder if not present
+img_name = "rcs_plot"   # adds final number is file name already exists
+img_extension = "pdf" 
 
 plt.rcParams.update({
     "font.family": "serif",
@@ -170,10 +178,10 @@ plt.tight_layout()
 # Save / show plot
 
 if save_plots:
-    if not os.path.exists("figures"):
-        os.makedirs("figures")
+    if not os.path.exists(folder_save):
+        os.makedirs(folder_save)
 
-    output_path = get_next_filename("figures", "rcs_2d_plot", "pdf")
+    output_path = get_next_filename(folder_save, img_name, img_extension)
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     print(f"--------- Plot saved to {output_path} ---------")
 else:

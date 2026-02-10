@@ -1,4 +1,4 @@
-// actual entry point
+// -------------- Simulation Start -------------- //
 
 #include "app/rtRcsEntry.hpp"
 
@@ -67,7 +67,7 @@ int runRcsApp(int argc, char** argv) {
         std::cerr << "╚═══════════════════════════════════════════════════╝\n";
     }
 
-    // ========== TIMING: Total application ==========
+    // @@ TIMING: Total application
     clock_t appStartTime = clock();
 
     simulationConfig config = loadConfig("config.txt", argc, argv);
@@ -85,7 +85,7 @@ int runRcsApp(int argc, char** argv) {
     nvtxRangePushA("Read Mesh");
 #endif
 
-    // ========== TIMING: Model loading ==========
+    // @@ TIMING: Model loading
     clock_t modelLoadStart = clock();
 
     modelLoader::MeshData mesh;
@@ -154,7 +154,7 @@ int runRcsApp(int argc, char** argv) {
     nvtxRangePop();
 #endif
 
-    // ========== TIMING: BVH construction ==========
+    // @@ TIMING: BVH construction
     clock_t bvhBuildStart = clock();
 
     bvhBuildOptions buildOptions;
@@ -171,7 +171,7 @@ int runRcsApp(int argc, char** argv) {
     clock_t bvhBuildEnd = clock();
     double bvhBuildTime = double(bvhBuildEnd - bvhBuildStart) / CLOCKS_PER_SEC;
 
-    // ========== TIMING: Memory allocation ==========
+    // @@ TIMING: Memory allocation
     clock_t memAllocStart = clock();
 
     if (rank == 0) printSeparator("MEMORY ALLOCATION");
@@ -203,7 +203,8 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // ========== Print initialization timing ==========
+    // @@ Print initialization timing
+
     if (rank == 0) {
         printSeparator("INITIALIZATION TIMING");
         printKv("Model Loading", modelLoadTime * 1000.0, "ms");
@@ -215,9 +216,9 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // ========== TIMING: File open (rank 0 only) ==========
+    // @@ TIMING: File open (rank 0 only)
     clock_t fileOpenStart = clock();
-    std::ofstream outFile;
+    std::ofstream outFile;                                                                  // OPEN FILE
     if (rank == 0) {
         outFile.open("rcs_results.csv");
         outFile << "# Frequency: " << config.freq << "\n# Grid: " << config.nx << "x" << config.ny << "\n";
@@ -227,17 +228,17 @@ int runRcsApp(int argc, char** argv) {
     clock_t fileOpenEnd = clock();
     double fileOpenTime = double(fileOpenEnd - fileOpenStart) / CLOCKS_PER_SEC;
 
-    // ========== Run sweep (with detailed timing inside) ==========
+    // @@ Run sweep (with detailed timing inside)
     // Note: only rank 0 writes to outFile; other ranks pass an unopened stream
-    sweepResults results = runSweep(config, buffers, bvhData, outFile);
+    sweepResults results = runSweep(config, buffers, bvhData, outFile);                     // SWEEP CALCULATION on theta and phi angles
 
-    // ========== TIMING: File close ==========
+    // @@ TIMING: File close
     clock_t fileCloseStart = clock();
-    if (rank == 0) outFile.close();
+    if (rank == 0) outFile.close();                                                         // CLOSE FILE
     clock_t fileCloseEnd = clock();
     double fileCloseTime = double(fileCloseEnd - fileCloseStart) / CLOCKS_PER_SEC;
 
-    // ========== TIMING: Cleanup ==========
+    // @@ TIMING: Cleanup
     clock_t cleanupStart = clock();
     
     if (rank == 0) printSeparator("CLEANUP");
@@ -252,11 +253,11 @@ int runRcsApp(int argc, char** argv) {
     clock_t cleanupEnd = clock();
     double cleanupTime = double(cleanupEnd - cleanupStart) / CLOCKS_PER_SEC;
 
-    // ========== Total application time ==========
+    // @@ Total application time
     clock_t appEndTime = clock();
     double totalAppTime = double(appEndTime - appStartTime) / CLOCKS_PER_SEC;
 
-    // ========== Print final timing summary ==========
+    // @@ Print final timing summary
     if (rank == 0) {
         printSeparator("TOTAL TIMING BREAKDOWN");
         printKv("Model Loading", modelLoadTime * 1000.0, "ms");
@@ -273,3 +274,5 @@ int runRcsApp(int argc, char** argv) {
 
     return 0;
 }
+
+// ---------------------------------------------- //

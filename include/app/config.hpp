@@ -11,9 +11,9 @@ struct simulationConfig {
     Real thetaStart = REAL_CONST(90.0);
     Real thetaEnd = REAL_CONST(90.0);
     int thetaSamples = 1;
-    Real gridSize = REAL_CONST(3.0);
-    int nx = 400;
-    int ny = 400;
+    Real gridSize = REAL_CONST(10.0);
+    int nx = 5000;
+    int ny = 5000;
     int tpbx = 16;
     int tpby = 16;
     int maxBounces = 20;

@@ -1,4 +1,4 @@
-// MPI-parallelized simulation sweep
+// ------------- MPI-parallelized simulation sweep ------------- //
 
 #include "sim/sweep.hpp"
 
@@ -94,9 +94,8 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     dim3 rtThreads(GPU_RT_BLOCK_X, GPU_RT_BLOCK_Y);
     dim3 rtBlocks(GPU_RT_GRID_X(config.nx), GPU_RT_GRID_Y(config.ny));
 
-    // ========================================================================
-    // Multi-stream pipeline with double-buffered accumulators
-    // ========================================================================
+    // ----------------------------------------------------------------------
+    // @@ Multi-stream pipeline with double-buffered accumulators
     //
     // Two streams allow overlapping computation with data movement:
     //   computeStream  – memset, RT kernel, PO kernel (all serialized here
@@ -115,7 +114,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     // The poComplete event ensures transferStream waits for PO to finish
     // before starting the D2H copy. The computeStream serializes RT→PO
     // naturally, and cannot start RT[N+1] until PO[N] is done (same stream).
-    // ========================================================================
+    // ----------------------------------------------------------------------
 
     constexpr int NUM_BUFS = 2;
 
@@ -206,11 +205,11 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     // cudaStreamWaitEvent before the RT kernel launch.
     bool needHitCountFence = false;
 
-    // ========================================================================
+    // ------------------------------------------------------------------------
     // Helper lambda: process a completed iteration's result.
     // Called after the transfer stream has been synchronized for that buffer.
     // Collects timing + RCS unconditionally; prints only every PRINT_INTERVAL.
-    // ========================================================================
+    // ------------------------------------------------------------------------
     auto processResult = [&](int buf, int prevGlobalIdx, Real prevThetaDeg,
                              Real prevPhiDeg) {
         // Query timing events (all guaranteed complete after transfer sync)
@@ -306,25 +305,24 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         }
     };
 
-    // ========================================================================
-    // Main sweep loop — pipelined
-    // ========================================================================
+    // ------------------------------------------------------------------------
+    // @@ Main sweep loop — pipelined
     //
-    //  Iteration timeline (GPU busy while CPU processes previous result):
+    // Iteration timeline (GPU busy while CPU processes previous result):
     //
-    //  computeStream:  |memset+RT[0]+PO[0]|memset+RT[1]+PO[1]|memset+RT[2]...
-    //  transferStream:           |D2H[0]--|        |D2H[1]--|
-    //  CPU:            angles[0] submit[0] angles[1] submit[1] drain[0] ...
+    // computeStream:  |memset+RT[0]+PO[0]|memset+RT[1]+PO[1]|memset+RT[2]...
+    // transferStream:           |D2H[0]--|        |D2H[1]--|
+    // CPU:            angles[0] submit[0] angles[1] submit[1] drain[0] ...
     //                                                         ↑ GPU is running
     //
-    //  Key: kernel submission happens BEFORE draining the previous result,
-    //  so the GPU starts new work immediately while the CPU catches up.
+    // Key: kernel submission happens BEFORE draining the previous result,
+    // so the GPU starts new work immediately while the CPU catches up.
     //
-    //  When showHitStats is enabled and a print is due, the next RT kernel
-    //  is held back via cudaStreamWaitEvent(hitCountCopied) so the CPU can
-    //  safely read the shared hitCount buffer.  The memset for that iteration
-    //  still runs (it doesn't touch hitCount), limiting the stall.
-    // ========================================================================
+    // When showHitStats is enabled and a print is due, the next RT kernel
+    // is held back via cudaStreamWaitEvent(hitCountCopied) so the CPU can
+    // safely read the shared hitCount buffer.  The memset for that iteration
+    // still runs (it doesn't touch hitCount), limiting the stall.
+    // ------------------------------------------------------------------------
     bool hasPending = false;
     int pendingBuf = 0;
     int pendingGlobalIdx = 0;
@@ -381,9 +379,9 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             needHitCountFence = false;
         }
 
-        // Ray tracing kernel
-        checkCudaErrors(cudaEventRecord(rtKernelStart[buf], computeStream));
-        launchRaysMultiBounce<<<rtBlocks, rtThreads, 0, computeStream>>>(
+        // @@ Ray tracing kernel
+        checkCudaErrors(cudaEventRecord(rtKernelStart[buf], computeStream)); 
+        launchRaysMultiBounce<<<rtBlocks, rtThreads, 0, computeStream>>>(                                               // Ray launch
             buffers.hitNormal, buffers.lastDir,
             buffers.hitDist, buffers.hitCount,
             config.nx, config.ny, llc, uVec, vVec, rayDir,
@@ -391,9 +389,9 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
             config.maxBounces);
         checkCudaErrors(cudaEventRecord(rtKernelStop[buf], computeStream));
 
-        // PO integration kernel — writes to accumDev[buf]
+        // @@ PO integration kernel — writes to accumDev[buf]
         checkCudaErrors(cudaEventRecord(poKernelStart[buf], computeStream));
-        integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_PO_BLOCK_SIZE), GPU_PO_BLOCK_SIZE, 0, computeStream>>>(
+        integratePoMultiBounce<<<GPU_GRID_SIZE(nRays, GPU_PO_BLOCK_SIZE), GPU_PO_BLOCK_SIZE, 0, computeStream>>>(       // PO Integral
             buffers.hitNormal, buffers.lastDir,
             buffers.hitDist, buffers.hitCount,
             nRays, k, rayDir, rayArea, accumDev[buf], config.reflectionConst);
@@ -410,7 +408,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
                                         transferStream));
         checkCudaErrors(cudaEventRecord(memcpyStop[buf], transferStream));
 
-        // ====== 3. Drain previous result (GPU is now busy with this iter) ======
+        // 3. Drain previous result (GPU is now busy with this iter)
         if (hasPending) {
             checkCudaErrors(cudaStreamSynchronize(transferStream));
 
@@ -436,7 +434,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         pendingPhiDeg = phiDeg;
     }
 
-    // ---- Drain the last pending iteration ----
+    // Drain the last pending iteration
     if (hasPending) {
         checkCudaErrors(cudaStreamSynchronize(transferStream));
         processResult(pendingBuf, pendingGlobalIdx, pendingThetaDeg, pendingPhiDeg);
@@ -584,3 +582,5 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
 
     return sweepResults{totalIterations, globalMaxTime};
 }
+
+// ------------------------------------------------------------- //

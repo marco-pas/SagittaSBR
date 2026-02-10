@@ -1,0 +1,95 @@
+╔═══════════════════════════════════════════════════╗
+║  SagittaSBR  >>---->  MONOSTATIC RCS CALCULATION  ║
+╚═══════════════════════════════════════════════════╝
+Using frequency from config file: 1e+10 Hz
+╔═══════════════════════════════════════════════════╗
+║                   GPU INFORMATION                 ║
+╠═══════════════════════════════════════════════════╣
+║ Device: NVIDIA A100-PCIE-40GB
+║ Compute Capability: 8.0
+║ Total Global Memory: 39.3929 GB
+║ Multiprocessors: 108
+║ Max Threads per Block: 1024
+╚═══════════════════════════════════════════════════╝
+
+
+┌── MEMORY ALLOCATION                              ┐
+│  BVH buffers and world setup complete.
+└──────────────────────────────────────────────────┘
+
+┌── INITIALIZATION TIMING                          ┐
+│ Model Loading       : 144.481 ms
+│ BVH Construction    : 861.406 ms
+│ GPU Memory Alloc    : 672.646 ms
+│ Total Init Time     : 1678.53 ms
+│ Triangle Count      : 161962 
+│ BVH Node Count      : 111289 
+└──────────────────────────────────────────────────┘
+
+┌── SIMULATION PARAMETERS                          ┐
+│ MPI Processes       : 1 
+│ Frequency           : 10 GHz
+│ Wavelength          : 29.9792 mm
+│ Wave Number k       : 209.585 rad/m
+│ Illumination Area   : 10000 m²
+│ Grid Size           : 20000x20000 
+│ Total Rays          : 400000000 
+│ Ray Density         : 40000 rays/m²
+│ Ray Area            : 2.5e-05 m²
+│ Phi Range           : 0.000000 to 360.000000 
+│ Theta Range         : 0.000000 to 180.000000 
+│ Show GPU info       : 1 
+│ Show Hit info       : 1 
+└──────────────────────────────────────────────────┘
+
+┌── EXECUTING SWEEP                                ┐
+│ Total iterations: 600
+│ Distributed across 1 MPI processes
+└──────────────────────────────────────────────────┘
+[R0:100/600] │ Θ: 28 ° │ Φ: 111° │ RT: 113.90ms │ PO: 7.84ms │ Tot: 121.74ms │ Hit: 13% │ Bounces: 1.30
+[R0:200/600] │ Θ: 56 ° │ Φ: 235° │ RT: 90.10ms │ PO: 7.87ms │ Tot: 97.98ms │ Hit: 10% │ Bounces: 1.34
+[R0:300/600] │ Θ: 85 ° │ Φ: 360° │ RT: 73.41ms │ PO: 7.55ms │ Tot: 80.97ms │ Hit: 2% │ Bounces: 2.21
+[R0:400/600] │ Θ: 123° │ Φ: 111° │ RT: 125.75ms │ PO: 7.78ms │ Tot: 133.53ms │ Hit: 10% │ Bounces: 1.76
+[R0:500/600] │ Θ: 151° │ Φ: 235° │ RT: 166.06ms │ PO: 7.97ms │ Tot: 174.04ms │ Hit: 13% │ Bounces: 1.49
+[R0:600/600] │ Θ: 180° │ Φ: 360° │ RT: 116.29ms │ PO: 8.08ms │ Tot: 124.37ms │ Hit: 14% │ Bounces: 1.30
+└──────────────────────────────────────────────────┘
+
+┌── SWEEP PERFORMANCE BREAKDOWN                    ┐
+│ Ray Tracing Kernel (total): 69311.41 ms
+│ PO Integration Kernel (total): 4701.62 ms
+│ Memset (total)      : 2.68 ms
+│ Memcpy D2H (total)  : 2.71 ms
+│ File Writes (total) : 1.12 ms
+│ Stats Computation (total): 1153.71 ms
+│ ─────────────────:  
+│ GPU Time (kernels only): 74013.03 ms
+│ Total Sweep Wall Time: 75097.06 ms
+└──────────────────────────────────────────────────┘
+
+┌── PER-ITERATION AVERAGES                         ┐
+│ Ray Tracing Kernel  : 115.52 ms
+│ PO Integration Kernel: 7.84 ms
+│ Memset              : 0.00 ms
+│ Memcpy D2H          : 0.00 ms
+│ File Write          : 0.00 ms
+│ ─────────────────:  
+│ Total Points        : 600 
+│ Average Time/Point  : 125.16 ms
+│ Speedup (vs sequential): 0.99 x
+└──────────────────────────────────────────────────┘
+
+┌── CLEANUP                                        ┐
+│  Device memory released. Success.
+└──────────────────────────────────────────────────┘
+
+┌── TOTAL TIMING BREAKDOWN                         ┐
+│ Model Loading       : 144.48 ms
+│ BVH Construction    : 861.41 ms
+│ GPU Memory Alloc    : 672.65 ms
+│ File Open/Header    : 0.21 ms
+│ Sweep Execution     : 75097.06 ms
+│ File Close          : 0.66 ms
+│ Cleanup             : 257.82 ms
+│ ─────────────────:  
+│ Total App Time      : 77038.12 ms
+└──────────────────────────────────────────────────┘

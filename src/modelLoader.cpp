@@ -34,9 +34,7 @@ static bool hasExtension(const std::string& filePath, const std::string& extLowe
 
 
 // OBJ loading (tinyobjloader)
-
 namespace {
-
 struct ObjVertexKey {
     int posIndex;
     int normalIndex;

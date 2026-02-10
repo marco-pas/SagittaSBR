@@ -2,6 +2,8 @@
 
 #include <sstream>
 
+// Print formatting for nice output
+
 void printSeparator(const std::string& title) {
     std::cerr << "\n┌── " << std::left << std::setw(46) << title << " ┐\n";
 }
