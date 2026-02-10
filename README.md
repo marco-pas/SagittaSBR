@@ -91,15 +91,11 @@ Plotting scripts read the `rcs_results.csv` file, saved in the simulation folder
 Options for the Radar Cross Section (RCS) plot of the results from `rcs_results.csv`.
 
 Command-line options:
-
-  `--unit`   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
-  
-  `--plot`   : Enable or disable plot saving/display (True/False), default True
-  
-  `--scans`  : Enable saving averaged RCS data for parameter scans, default False
+- `--unit`   : Select plotting unit ('dbsm' or 'm2'), default is 'dbsm'
+- `--plot`   : Enable or disable plot saving/display (True/False), default True
+- `--scans`  : Enable saving averaged RCS data for parameter scans, default False
 
 Examples:
-
 ```bash
 python3 tools/plotRCS.py
 python3 tools/plotRCS.py --unit=m2
