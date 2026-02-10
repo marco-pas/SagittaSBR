@@ -15,9 +15,6 @@
 #include <algorithm>
 #include <cctype>
 
-
-
-
 namespace modelLoader {
 
 static std::string toLower(const std::string& s) {
@@ -35,9 +32,8 @@ static bool hasExtension(const std::string& filePath, const std::string& extLowe
     return lower.compare(lower.size() - extLower.size(), extLower.size(), extLower) == 0;
 }
 
-// ----------------------------------------
+
 // OBJ loading (tinyobjloader)
-// ----------------------------------------
 
 namespace {
 
@@ -185,9 +181,7 @@ bool loadObjInternal(
 
 } // anonymous namespace (OBJ)
 
-// ----------------------------------------
 // GLTF loading (tinygltf)
-// ----------------------------------------
 
 namespace {
 
@@ -422,9 +416,7 @@ bool loadGltfInternal(
 
 } // anonymous namespace (GLTF)
 
-// ----------------------------------------
 // Public API
-// ----------------------------------------
 
 bool loadModel(
     const std::string& filePath,
@@ -456,5 +448,4 @@ bool loadModel(
         return false;
     }
 }
-
 } // namespace modelLoader

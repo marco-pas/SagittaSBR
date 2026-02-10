@@ -11,7 +11,7 @@
 
 int main(int argc, char** argv) {
 
-    MPI_Init(&argc, &argv);
+    MPI_Init(&argc, &argv);                         // MPI init
 
     int world_size;
     MPI_Comm_size(MPI_COMM_WORLD, &world_size);  
@@ -26,6 +26,6 @@ int main(int argc, char** argv) {
     nvtxRangePop();
 #endif
 
-    MPI_Finalize();
+    MPI_Finalize();                                 // MPI finalize
     return rc;
 }

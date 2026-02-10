@@ -1,23 +1,30 @@
-## Configuration for SagittaSBR ##
-## Simulation Values
+# ------------------------------------------------ #
+# --------- Configuration for SagittaSBR --------- #
+# ------------------------------------------------ #
 
-# Make sure that your frequency is large enough to have lambda << system size
-# Make sure that your launcher size ("grid_size") is large enough to fully represent your object. For a sphere of radius 1, you can set "grid_size = 2.5".
-# Make sure that your ray-density is large enough to fully represent yout wavelength. Make sure that lambda > 5 * sqrt(rayArea). Code throws a warning if this is not true.
 
-phi_start 0           # starting phi angle
-phi_end 180          # final phi angle
-phi_samples 10          # number of samples in phi
-theta_start 0        # starting theta angle
-theta_end 360         # final theta angle
+# NOTE. Make sure that:
+# 1. frequency is large enough to have lambda << system size.
+# 2. launcher size ("grid_size") is large enough to fully represent your object. For a sphere of radius 1, you can set "grid_size = 2.5".
+# 3. ray-density is large enough to fully represent yout wavelength: lambda > 5 * sqrt(rayArea). Code throws a warning if this is not true.
+
+
+phi_start 0              # [deg], starting phi angle
+phi_end 180              # [deg], final phi angle
+phi_samples 10           # number of samples in phi
+theta_start 0            # [deg], starting theta angle
+theta_end 360            # [deg], final theta angle
 theta_samples 10         # number of samples in theta
-freq 1e10             # freq of the waves
-grid_size 100         # width W and length L for our launcher (it is a square), this has a distance "distance_offset = 10.0f * grid_size" from the center
-n_x 20000               # points in x
-n_y 20000               # points in y
+freq 1e10                # [Hz], freq of the waves
+grid_size 100            # [m], width W and length L for our launcher (it is a square), this has a distance "distance_offset = 10.0f * grid_size" from the center
+n_x 20000                # points in x
+n_y 20000                # points in y
 tpb_x 16                 # theads per block x
 tpb_y 16                 # theads per block y
 max_bounces 100          # maximum hits that each ray can have
-reflection_const 1.0    # PEC
-show_info_GPU 1       # print info for the GPU (true 1 / false 0)
-show_hit_stats 1      # print stats for the hit tracking at every angle (true 1 / false 0)
+reflection_const 1.0     # PEC
+show_info_GPU 1          # display GPU info (1=true, 0=false)
+show_hit_stats 1         # display verbose hit stats stats (1=true, 0=false)
+
+
+# ------------------------------------------------ #
