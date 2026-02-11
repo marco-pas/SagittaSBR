@@ -1,4 +1,4 @@
-// -------------- Simulation Start -------------- //
+// actual entry point
 
 #include "app/rtRcsEntry.hpp"
 
@@ -67,7 +67,7 @@ int runRcsApp(int argc, char** argv) {
         std::cerr << "╚═══════════════════════════════════════════════════╝\n";
     }
 
-    // @@ TIMING: Total application
+    // ========== TIMING: Total application ==========
     clock_t appStartTime = clock();
 
     simulationConfig config = loadConfig("config.txt", argc, argv);
@@ -85,7 +85,7 @@ int runRcsApp(int argc, char** argv) {
     nvtxRangePushA("Read Mesh");
 #endif
 
-    // @@ TIMING: Model loading
+    // ========== TIMING: Model loading ==========
     clock_t modelLoadStart = clock();
 
     modelLoader::MeshData mesh;
@@ -154,7 +154,7 @@ int runRcsApp(int argc, char** argv) {
     nvtxRangePop();
 #endif
 
-    // @@ TIMING: BVH construction
+    // ========== TIMING: BVH construction ==========
     clock_t bvhBuildStart = clock();
 
     bvhBuildOptions buildOptions;
@@ -171,7 +171,7 @@ int runRcsApp(int argc, char** argv) {
     clock_t bvhBuildEnd = clock();
     double bvhBuildTime = double(bvhBuildEnd - bvhBuildStart) / CLOCKS_PER_SEC;
 
-    // @@ TIMING: Memory allocation
+    // ========== TIMING: Memory allocation ==========
     clock_t memAllocStart = clock();
 
     if (rank == 0) printSeparator("MEMORY ALLOCATION");
@@ -203,8 +203,7 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // @@ Print initialization timing
-
+    // ========== Print initialization timing ==========
     if (rank == 0) {
         printSeparator("INITIALIZATION TIMING");
         printKv("Model Loading", modelLoadTime * 1000.0, "ms");
@@ -216,9 +215,86 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // @@ TIMING: File open (rank 0 only)
+    // ========== Print estimated memory footprint ==========
+    if (rank == 0) {
+        printSeparator("MEMORY FOOTPRINT ESTIMATE");
+
+        const std::size_t sizeofReal = sizeof(Real);
+        const std::size_t sizeofVec3 = sizeof(vec3);
+        const std::size_t sizeofTriangle = sizeof(Triangle);
+        const std::size_t sizeofBvhNode = sizeof(BvhNode);
+        const std::size_t sizeofComplex = sizeof(cuRealComplex);
+
+        // --- GPU device memory ---
+        std::size_t gpuHitNormal   = rayCount * sizeofVec3;
+        std::size_t gpuLastDir     = rayCount * sizeofVec3;
+        std::size_t gpuHitDist     = rayCount * sizeofReal;
+        std::size_t gpuHitCount    = rayCount * sizeof(int);
+        std::size_t gpuAccum       = 2 * sizeofComplex;       // double-buffered in sweep
+        std::size_t gpuBvhTris     = bvhData.triangleCount * sizeofTriangle;
+        std::size_t gpuBvhNodes    = bvhData.nodeCount * sizeofBvhNode;
+
+        std::size_t gpuRayBuffers  = gpuHitNormal + gpuLastDir + gpuHitDist + gpuHitCount;
+        std::size_t gpuBvhTotal    = gpuBvhTris + gpuBvhNodes;
+        std::size_t gpuTotal       = gpuRayBuffers + gpuBvhTotal + gpuAccum;
+
+        // --- Host pinned memory ---
+        std::size_t pinnedHitCount = rayCount * sizeof(int);
+        std::size_t pinnedAccum    = 2 * sizeofComplex;       // double-buffered in sweep
+        std::size_t pinnedTotal    = pinnedHitCount + pinnedAccum;
+
+        // --- Host heap (persistent during sweep) ---
+        // BVH build result vectors are moved/consumed, mesh is transient.
+        // localResults vector in sweep (per iteration: 5 values)
+        int totalIterations = config.thetaSamples * config.phiSamples;
+        std::size_t hostSweepResults = totalIterations * (sizeof(int) + 4 * sizeofReal);
+        // MPI gather buffers (rank 0 only)
+        std::size_t hostGatherBufs  = totalIterations * (sizeof(int) + 4 * sizeofReal);
+        std::size_t hostTotal       = hostSweepResults + hostGatherBufs;
+
+        std::size_t grandTotal = gpuTotal + pinnedTotal + hostTotal;
+
+        auto toMB = [](std::size_t bytes) -> double {
+            return static_cast<double>(bytes) / (1024.0 * 1024.0);
+        };
+
+        printKv("Precision", sizeofReal == 8 ? "double (64-bit)" : "float (32-bit)");
+        printKv("sizeof(Real)", sizeofReal, "B");
+        printKv("sizeof(vec3)", sizeofVec3, "B");
+        printKv("sizeof(Triangle)", sizeofTriangle, "B");
+        printKv("sizeof(BvhNode)", sizeofBvhNode, "B");
+
+        std::cerr << "│\n";
+        std::cerr << "│  ── GPU Device Memory ──\n";
+        printKv("  hitNormal", toMB(gpuHitNormal), "MB");
+        printKv("  lastDir", toMB(gpuLastDir), "MB");
+        printKv("  hitDist", toMB(gpuHitDist), "MB");
+        printKv("  hitCount", toMB(gpuHitCount), "MB");
+        printKv("  accum (x2)", toMB(gpuAccum), "MB");
+        printKv("  BVH triangles", toMB(gpuBvhTris), "MB");
+        printKv("  BVH nodes", toMB(gpuBvhNodes), "MB");
+        printKv("  ─── Subtotal GPU", toMB(gpuTotal), "MB");
+
+        std::cerr << "│\n";
+        std::cerr << "│  ── Host Pinned Memory ──\n";
+        printKv("  hitCountHost", toMB(pinnedHitCount), "MB");
+        printKv("  accumHost (x2)", toMB(pinnedAccum), "MB");
+        printKv("  ─── Subtotal Pinned", toMB(pinnedTotal), "MB");
+
+        std::cerr << "│\n";
+        std::cerr << "│  ── Host Heap (sweep) ──\n";
+        printKv("  localResults", toMB(hostSweepResults), "MB");
+        printKv("  MPI gather bufs", toMB(hostGatherBufs), "MB");
+        printKv("  ─── Subtotal Host", toMB(hostTotal), "MB");
+
+        std::cerr << "│\n";
+        printKv("  ═══ TOTAL ESTIMATED", toMB(grandTotal), "MB");
+        printEndSeparator();
+    }
+
+    // ========== TIMING: File open (rank 0 only) ==========
     clock_t fileOpenStart = clock();
-    std::ofstream outFile;                                                                  // OPEN FILE
+    std::ofstream outFile;
     if (rank == 0) {
         outFile.open("rcs_results.csv");
         outFile << "# Frequency: " << config.freq << "\n# Grid: " << config.nx << "x" << config.ny << "\n";
@@ -228,17 +304,17 @@ int runRcsApp(int argc, char** argv) {
     clock_t fileOpenEnd = clock();
     double fileOpenTime = double(fileOpenEnd - fileOpenStart) / CLOCKS_PER_SEC;
 
-    // @@ Run sweep (with detailed timing inside)
+    // ========== Run sweep (with detailed timing inside) ==========
     // Note: only rank 0 writes to outFile; other ranks pass an unopened stream
-    sweepResults results = runSweep(config, buffers, bvhData, outFile);                     // SWEEP CALCULATION on theta and phi angles
+    sweepResults results = runSweep(config, buffers, bvhData, outFile);
 
-    // @@ TIMING: File close
+    // ========== TIMING: File close ==========
     clock_t fileCloseStart = clock();
-    if (rank == 0) outFile.close();                                                         // CLOSE FILE
+    if (rank == 0) outFile.close();
     clock_t fileCloseEnd = clock();
     double fileCloseTime = double(fileCloseEnd - fileCloseStart) / CLOCKS_PER_SEC;
 
-    // @@ TIMING: Cleanup
+    // ========== TIMING: Cleanup ==========
     clock_t cleanupStart = clock();
     
     if (rank == 0) printSeparator("CLEANUP");
@@ -253,11 +329,11 @@ int runRcsApp(int argc, char** argv) {
     clock_t cleanupEnd = clock();
     double cleanupTime = double(cleanupEnd - cleanupStart) / CLOCKS_PER_SEC;
 
-    // @@ Total application time
+    // ========== Total application time ==========
     clock_t appEndTime = clock();
     double totalAppTime = double(appEndTime - appStartTime) / CLOCKS_PER_SEC;
 
-    // @@ Print final timing summary
+    // ========== Print final timing summary ==========
     if (rank == 0) {
         printSeparator("TOTAL TIMING BREAKDOWN");
         printKv("Model Loading", modelLoadTime * 1000.0, "ms");
@@ -274,5 +350,3 @@ int runRcsApp(int argc, char** argv) {
 
     return 0;
 }
-
-// ---------------------------------------------- //
