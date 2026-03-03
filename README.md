@@ -126,4 +126,4 @@ MPI is used to perform angle scans.
 
 Simulation of RCS of a A380 airplane.
 
-![My Logo](./assets/simulationResultsExample.svg)
+![example](./assets/simulationResultsExample.png)
