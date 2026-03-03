@@ -1,6 +1,6 @@
 ![My Logo](./assets/SBR.svg)
 
-# SBR Project for RCS Calculations
+# Shooting-and-Bouncing (SBR) Rays for Radar Cross Section (RCS) Calculations
 
 SagittaSBR is an open-source ray tracing code in C++/CUDA for calculating the monostatic Radar Cross Section (RCS) of objects in the far field. It uses the Shooting-and-Bouncing Rays (SBR) method, which is a combination of Geometrical Optics (GO) and Physical Optics (PO). The code tracks ray hits and computes the total scattered field at the receiver.
 
@@ -99,7 +99,6 @@ python3 tools/plotRCS.py
 python3 tools/plotRCS.py --unit=m2
 python3 tools/plotRCS.py --plot=False --scans=True --unit=m2
 ```
-
 
 ---
 
