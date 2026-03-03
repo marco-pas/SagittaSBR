@@ -67,7 +67,7 @@ int runRcsApp(int argc, char** argv) {
         std::cerr << "╚═══════════════════════════════════════════════════╝\n";
     }
 
-    // ========== TIMING: Total application ==========
+    // @@ timing: Total application
     clock_t appStartTime = clock();
 
     simulationConfig config = loadConfig("config.txt", argc, argv);
@@ -85,7 +85,7 @@ int runRcsApp(int argc, char** argv) {
     nvtxRangePushA("Read Mesh");
 #endif
 
-    // ========== TIMING: Model loading ==========
+    // @@ timing: Model load
     clock_t modelLoadStart = clock();
 
     modelLoader::MeshData mesh;
@@ -154,7 +154,7 @@ int runRcsApp(int argc, char** argv) {
     nvtxRangePop();
 #endif
 
-    // ========== TIMING: BVH construction ==========
+    // @@ timing: BVH construction
     clock_t bvhBuildStart = clock();
 
     bvhBuildOptions buildOptions;
@@ -171,7 +171,7 @@ int runRcsApp(int argc, char** argv) {
     clock_t bvhBuildEnd = clock();
     double bvhBuildTime = double(bvhBuildEnd - bvhBuildStart) / CLOCKS_PER_SEC;
 
-    // ========== TIMING: Memory allocation ==========
+    // @@ timing: Memory allocation
     clock_t memAllocStart = clock();
 
     if (rank == 0) printSeparator("MEMORY ALLOCATION");
@@ -203,9 +203,9 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // ========== Print initialization timing ==========
+    // Print initialization timing
     if (rank == 0) {
-        printSeparator("INITIALIZATION TIMING");
+        printSeparator("INITIALIZATION @@ timing");
         printKv("Model Loading", modelLoadTime * 1000.0, "ms");
         printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
         printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");
@@ -215,7 +215,7 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // ========== Print estimated memory footprint ==========
+    // Print estimated memory footprint
     if (rank == 0) {
         printSeparator("MEMORY FOOTPRINT ESTIMATE");
 
@@ -225,7 +225,7 @@ int runRcsApp(int argc, char** argv) {
         const std::size_t sizeofBvhNode = sizeof(BvhNode);
         const std::size_t sizeofComplex = sizeof(cuRealComplex);
 
-        // --- GPU device memory ---
+        // GPU device memory 
         std::size_t gpuHitNormal   = rayCount * sizeofVec3;
         std::size_t gpuLastDir     = rayCount * sizeofVec3;
         std::size_t gpuHitDist     = rayCount * sizeofReal;
@@ -238,12 +238,12 @@ int runRcsApp(int argc, char** argv) {
         std::size_t gpuBvhTotal    = gpuBvhTris + gpuBvhNodes;
         std::size_t gpuTotal       = gpuRayBuffers + gpuBvhTotal + gpuAccum;
 
-        // --- Host pinned memory ---
+        // Host pinned memory 
         std::size_t pinnedHitCount = rayCount * sizeof(int);
         std::size_t pinnedAccum    = 2 * sizeofComplex;       // double-buffered in sweep
         std::size_t pinnedTotal    = pinnedHitCount + pinnedAccum;
 
-        // --- Host heap (persistent during sweep) ---
+        // Host heap (persistent during sweep)
         // BVH build result vectors are moved/consumed, mesh is transient.
         // localResults vector in sweep (per iteration: 5 values)
         int totalIterations = config.thetaSamples * config.phiSamples;
@@ -292,7 +292,7 @@ int runRcsApp(int argc, char** argv) {
         printEndSeparator();
     }
 
-    // ========== TIMING: File open (rank 0 only) ==========
+    // @@ timing: File open (rank 0 only)
     clock_t fileOpenStart = clock();
     std::ofstream outFile;
     if (rank == 0) {
@@ -304,17 +304,17 @@ int runRcsApp(int argc, char** argv) {
     clock_t fileOpenEnd = clock();
     double fileOpenTime = double(fileOpenEnd - fileOpenStart) / CLOCKS_PER_SEC;
 
-    // ========== Run sweep (with detailed timing inside) ==========
+    // Run sweep (with detailed timing inside)
     // Note: only rank 0 writes to outFile; other ranks pass an unopened stream
     sweepResults results = runSweep(config, buffers, bvhData, outFile);
 
-    // ========== TIMING: File close ==========
+    // @@ timing: File close
     clock_t fileCloseStart = clock();
     if (rank == 0) outFile.close();
     clock_t fileCloseEnd = clock();
     double fileCloseTime = double(fileCloseEnd - fileCloseStart) / CLOCKS_PER_SEC;
 
-    // ========== TIMING: Cleanup ==========
+    // @@ timing: Cleanup
     clock_t cleanupStart = clock();
     
     if (rank == 0) printSeparator("CLEANUP");
@@ -329,13 +329,13 @@ int runRcsApp(int argc, char** argv) {
     clock_t cleanupEnd = clock();
     double cleanupTime = double(cleanupEnd - cleanupStart) / CLOCKS_PER_SEC;
 
-    // ========== Total application time ==========
+    // Total application time
     clock_t appEndTime = clock();
     double totalAppTime = double(appEndTime - appStartTime) / CLOCKS_PER_SEC;
 
-    // ========== Print final timing summary ==========
+    // Print final timing summary
     if (rank == 0) {
-        printSeparator("TOTAL TIMING BREAKDOWN");
+        printSeparator("TOTAL @@ timing BREAKDOWN");
         printKv("Model Loading", modelLoadTime * 1000.0, "ms");
         printKv("BVH Construction", bvhBuildTime * 1000.0, "ms");
         printKv("GPU Memory Alloc", memAllocTime * 1000.0, "ms");

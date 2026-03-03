@@ -332,7 +332,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
     for (int globalIdx = myStart; globalIdx < myEnd; ++globalIdx) {
         int buf = (globalIdx - myStart) % NUM_BUFS;
 
-        // ====== 1. CPU: compute angles (pure CPU, overlaps with GPU tail) ======
+        // 1. CPU: compute angles (pure CPU, overlaps with GPU tail)
         const int t = globalIdx / config.phiSamples;
         const int p = globalIdx % config.phiSamples;
 
@@ -363,7 +363,7 @@ sweepResults runSweep(const simulationConfig& config, deviceBuffers& buffers,
         vec3 vVec = unitVector(cross(dir, uVec)) * config.gridSize;
         vec3 llc = (dir * distanceOffset) - REAL_CONST(0.5) * uVec - REAL_CONST(0.5) * vVec;
 
-        // ====== 2. Submit GPU work on computeStream (GPU starts ASAP) ======
+        // 2. Submit GPU work on computeStream (GPU starts ASAP)
 
         // Memset this buffer's accumulator (safe even if hitCount fence is
         // pending — memset touches accumDev, not hitCount)

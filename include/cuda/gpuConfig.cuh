@@ -1,20 +1,20 @@
 #ifndef GPU_CONFIG_CUH
 #define GPU_CONFIG_CUH
 
-// ----------------------------------------------------------------------------
+// @@
 // GPU CONFIGURATION - Centralized settings for AMD and NVIDIA GPUs
 // All GPU-specific tuning parameters should be defined here for maintainability.
 // Different architectures have different optimal configurations.
-// ----------------------------------------------------------------------------
+// @@
 
 #if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
-    // ----------------------------------------------------------------------------
+    // @@
     // AMD GPU Configuration (MI250X / CDNA2 / gfx90a)
     // - Wavefront size: 64 threads (vs 32 for NVIDIA)
     // - 110 compute units, each can run up to 32 wavefronts
     // - Higher register count per thread (256 VGPRs)
     // - Prefer block sizes that are multiples of 64
-    // ----------------------------------------------------------------------------
+    // @@
     
     #define GPU_WARP_SIZE 64
     
@@ -44,12 +44,12 @@
     #define GPU_SHFL_XOR(val, mask) __shfl_xor(val, mask)
     
 #else
-    // ----------------------------------------------------------------------------
+    // @@
     // NVIDIA GPU Configuration (Ampere/Ada/Hopper)
     // - Warp size: 32 threads
     // - Requires explicit sync mask for warp shuffles
     // - Standard 16x16 blocks work well for most kernels
-    // ----------------------------------------------------------------------------
+    // @@
     
     #define GPU_WARP_SIZE 32
     

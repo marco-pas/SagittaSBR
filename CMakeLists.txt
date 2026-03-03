@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 
-# ============================================================================
+# @ @ @ @
 # Build Configuration - Default to Release with high optimizations
-# ============================================================================
+# @ @ @ @
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Setting build type to 'Release' as none was specified.")
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
@@ -92,9 +92,9 @@ target_compile_features(projectOptions
         cxx_std_23
 )
 
-# ============================================================================
+# @ @ @ @
 # Optimization Flags - High performance by default
-# ============================================================================
+# @ @ @ @
 # Release optimization flags for C/C++
 target_compile_options(projectOptions
     INTERFACE
@@ -103,9 +103,9 @@ target_compile_options(projectOptions
         $<$<CONFIG:Debug>:-O0 -g>
 )
 
-# ============================================================================
+# @ @ @ @
 # GPU-specific optimization flags
-# ============================================================================
+# @ @ @ @
 #
 # The AABB slab test computes 1.0/direction → ±Inf for axis-aligned rays.
 # IEEE 754 guarantees fmin(Inf,x)=x and fmax(-Inf,x)=x, which the BVH
