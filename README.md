@@ -1,4 +1,9 @@
+---
+
 ![My Logo](./assets/SBR.svg)
+
+
+---
 
 # Shooting-and-Bouncing (SBR) Rays for Radar Cross Section (RCS) Calculations
 
@@ -100,8 +105,6 @@ python3 tools/plotRCS.py --unit=m2
 python3 tools/plotRCS.py --plot=False --scans=True --unit=m2
 ```
 
----
-
 ## Frequency Scans
 
 To perform frequency sweeps, you can use or adapt the provided shell script.
@@ -119,3 +122,8 @@ OpenMP is used to build the BVH of the object.
 
 MPI is used to perform angle scans.
 
+## Example of Results
+
+Simulation of RCS of a A380 airplane.
+
+![My Logo](./assets/simulationResultsExample.svg)
