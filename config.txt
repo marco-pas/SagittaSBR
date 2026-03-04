@@ -1,30 +1,68 @@
-# ------------------------------------------------ #
-#           Configuration for SagittaSBR           #
-# ------------------------------------------------ #
+# ---------------------------------------------------------------- #
+#                         SagittaSBR Configuration                 #
+# ---------------------------------------------------------------- #
+#
+# IMPORTANT PHYSICAL CONSTRAINTS
+#
+# 1) Frequency condition:
+#    Ensure wavelength λ is much smaller than the characteristic
+#    object size:
+#        λ << object_size
+#
+# 2) Launcher (grid_size):
+#    Must fully cover the projected object area.
+#    Example:
+#        Sphere radius = 1 m  →  grid_size = 2.5 m > 2 * radius 
+#
+# 3) Ray density condition:
+#    Ray sampling must resolve the wavelength:
+#        λ > 5 * sqrt(ray_area)
+#    -Note- The code will issue a warning if this is violated.
+#
+# ---------------------------------------------------------------- #
 
 
-# NOTE. Make sure that:
-# 1. frequency is large enough to have lambda << system size.
-# 2. launcher size ("grid_size") is large enough to fully represent your object. For a sphere of radius 1, you can set "grid_size = 2.5".
-# 3. ray-density is large enough to fully represent yout wavelength: lambda > 5 * sqrt(rayArea). Code throws a warning if this is not true.
+# ------------------ Angular Sampling ---------------------------- #
+
+phi_start      0        # [deg] Starting azimuth angle
+phi_end        360      # [deg] Ending azimuth angle
+phi_samples    30       # Number of azimuth samples
+
+theta_start    0        # [deg] Starting elevation angle
+theta_end      180      # [deg] Ending elevation angle
+theta_samples  20       # Number of elevation samples
 
 
-phi_start 0              # [deg], starting phi angle
-phi_end 360              # [deg], final phi angle
-phi_samples 30           # number of samples in phi
-theta_start 0            # [deg], starting theta angle
-theta_end 180            # [deg], final theta angle
-theta_samples 20         # number of samples in theta
-freq 1e10                # [Hz], freq of the waves
-grid_size 100            # [m], width W and length L for our launcher (it is a square), this has a distance "distance_offset = 10.0f * grid_size" from the center
-n_x 20000                # points in x
-n_y 20000                # points in y
-tpb_x 16                 # theads per block x
-tpb_y 16                 # theads per block y
-max_bounces 100          # maximum hits that each ray can have
-reflection_const 1.0     # PEC
-show_info_GPU 1          # display GPU info (1=true, 0=false)
-show_hit_stats 1         # display verbose hit stats stats (1=true, 0=false)
+# ------------------ Wave Parameters ----------------------------- #
+
+freq           1e10     # [Hz] Wave frequency (10 GHz example)
 
 
-# ------------------------------------------------ #
+# ------------------ Launcher / Ray Grid ------------------------- #
+
+grid_size      100      # [m] Square launcher width (W = L)
+                       # Launcher offset distance:
+                       # distance_offset = 10 * grid_size
+
+n_x            20000    # Number of ray samples in X
+n_y            20000    # Number of ray samples in Y
+
+
+# ------------------ GPU Execution Parameters -------------------- #
+
+tpb_x          16       # Threads per block (X dimension)
+tpb_y          16       # Threads per block (Y dimension)
+
+
+# ------------------ Ray Tracing Parameters ---------------------- #
+
+max_bounces    100      # Maximum reflections per ray
+reflection_const 1.0    # Reflection coefficient (1.0 = PEC)
+
+
+# ------------------ Output / Debug ------------------------------ #
+
+show_info_GPU  1        # Show GPU information (1=true, 0=false)
+show_hit_stats 1        # Show verbose hit stats (1=true, 0=false)
+
+# ---------------------------------------------------------------- #
