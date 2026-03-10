@@ -1,6 +1,11 @@
 ---
 
-![My Logo](./assets/SBR.svg)
+
+<p align="center">
+  <img src="./assets/SBR.svg" alt="TGV" width="80%">
+  <br>
+  <em></em>
+</p>
 
 
 ---
@@ -13,7 +18,11 @@ SagittaSBR is an open-source ray tracing code in C++/CUDA for calculating the mo
 
 Simulation of RCS of a A380 airplane.
 
-![example](./assets/simulationResultsExample.png)
+<p align="center">
+  <img src="./assets/simulationResultsExample.png" alt="TGV" width="95%">
+  <br>
+  <em></em>
+</p>
 
 ## Running a Simulation
 
