@@ -9,6 +9,12 @@
 
 SagittaSBR is an open-source ray tracing code in C++/CUDA for calculating the monostatic Radar Cross Section (RCS) of objects in the far field. It uses the Shooting-and-Bouncing Rays (SBR) method, which is a combination of Geometrical Optics (GO) and Physical Optics (PO). The code tracks ray hits and computes the total scattered field at the receiver.
 
+## Example of Results
+
+Simulation of RCS of a A380 airplane.
+
+![example](./assets/simulationResultsExample.png)
+
 ## Running a Simulation
 
 Before compiling, make sure you have a compatible GPU (NVIDIA or AMD). Make also sure to have a MPI implementation available.
@@ -121,9 +127,3 @@ from Mie scattering for a PEC sphere.
 OpenMP is used to build the BVH of the object.
 
 MPI is used to perform angle scans.
-
-## Example of Results
-
-Simulation of RCS of a A380 airplane.
-
-![example](./assets/simulationResultsExample.png)
