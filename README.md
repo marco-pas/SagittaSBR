@@ -16,12 +16,10 @@ SagittaSBR is an open-source ray tracing code in C++/CUDA for calculating the mo
 
 ## Example of Results
 
-Simulation of RCS of a A380 airplane.
-
 <p align="center">
   <img src="./assets/simulationResultsExample.png" alt="TGV" width="95%">
   <br>
-  <em></em>
+  <em>Simulation of RCS of a A380 airplane.</em>
 </p>
 
 ## Running a Simulation
